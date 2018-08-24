@@ -49,6 +49,10 @@ public:
 	}
 
 
+	std::ostream& output_greeting(std::ostream& s) {
+		return s << "Hello";
+	}
+
 	void test_str_builder() {
 		using M = str_builder;
 		using std::endl;
@@ -64,6 +68,11 @@ public:
 		} catch(instantiation_error e) {
 			TS_ASSERT_EQUALS(e.what(), "A silly result 1+1=2");
 		}
+
+		M out;
+		output_greeting(out);
+		out << endl;
+		TS_ASSERT_EQUALS(out.str(), "Hello\n");
 	}
 
 

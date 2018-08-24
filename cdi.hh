@@ -1,14 +1,7 @@
 #pragma once
 
-#include <unordered_set>
-#include <unordered_map>
-#include <typeinfo>
-#include <typeindex>
-#include <functional>
-#include <cassert>
-#include <any>
-
 #include "provider.hh"
+
 
 namespace cdi {
 
@@ -37,6 +30,15 @@ public:
 	  */
 	template <typename Value>
 	Value get_object() const { return std::any_cast<Value>(obj); }
+
+	/**
+		Get an object of the provided value stored inside the asset
+		@tparam Value the type of the value, which must be CopyConstructible
+		@return the stored value
+		@throw std::bad_any_cast 
+	  */
+	template <typename Value>
+	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
 
 	/**
 		Get a reference to the std::any object within the asset.
@@ -79,16 +81,19 @@ public:
 		this method calls create() to create one.
 	  */
 	template <typename Resource>
-	typename Resource::provided_type get(const Resource& r) {
+	typename Resource::instance_type get(const Resource& r) {
 		using M = utilities::str_builder;
-		using provided_type = typename Resource::provided_type;
+		using instance_type = typename Resource::instance_type;
 		try {
-			const asset& ass = asset_map.lookup(r);
-			return ass.get_object<provided_type>();
+			const asset& ass = asset_map.at(r);
+			return ass.get_object<instance_type>();
 		} catch(std::out_of_range) {
 			return create(r);
 		} catch(std::bad_any_cast) {
 			throw instantiation_error(M() << "Cyclic instantiation for " << r.id());
+		} catch(...) {
+			std::throw_with_nested(instantiation_error(M() 
+				<< "Internal error during instantiation for " << r.id()));			
 		}
 	}
 
@@ -103,31 +108,44 @@ public:
 		Currently this is only meant to be called by get()
 	  */
 	template <typename Resource>
-	typename Resource::provided_type create(const Resource& r) {
-		using provided_type = typename Resource::provided_type;
-
-		resource_manager<Resource>* rm = declare(r);
-		auto [iter, succ] = asset_map.bind_emplace(r, rm->provide());
+	typename Resource::instance_type create(const Resource& r) {
+		using instance_type = typename Resource::instance_type;
+		// first, add a null entry, so that we can detect cycles!
+		auto [iter, succ] = asset_map.emplace(r, std::any());
 		assert(succ);
-		const asset& ass = (*iter).second;
-		return ass.get_object<provided_type>();
+		asset& ass = (*iter).second;
+		assert(! ass.object().has_value());
+
+		try {
+			resource_manager<Resource>* rm = declare(r);
+			ass.object() = rm->provide();
+			rm->inject(ass.get_object_ref<instance_type>());
+			return ass.get_object<instance_type>();
+		} catch(...) {
+			asset_map.erase(iter);
+			std::throw_with_nested(instantiation_error(u::str_builder() << "In providing to " << r));
+		}
 	}
 
 	/**
 	   Empty the context, disposing all resource instances.
 	  */
 	void clear() {
-		for(auto& [ti, qmap] : asset_map.get_map()) {
-			for(auto& [quals, ass] : qmap) {
-				basic_resource_manager* rm = prov_map.at(ti,quals);
+		// call dispose on every object in the asset map
+		for(auto& [rid, ass] : asset_map) {
+			try {
+				basic_resource_manager* rm = providence().at(rid);
 				rm->dispose_any(ass.object());
+			} catch(std::out_of_range) {
+				throw disposal_error(u::str_builder() 
+					<<"Could not obtain resource manager for " << rid 
+					<< " found in the context!");
 			}
-			qmap.clear();
 		}
 		asset_map.clear();
 	}
 
-private:
+//private:
 	resource_map<asset> asset_map;
 };
 
@@ -159,8 +177,10 @@ struct NewScope
 		@return the new resource instance
 		@throw instantiation_error if something went wrong
 	  */
-	template <typename Value, typename ... Tags>
-	inline static Value get(const resource<Value, NewScope, Tags...>& r) {
+	template <typename Resource>
+	inline static typename Resource::instance_type get(const Resource& r) {
+		static_assert( std::is_same_v<typename Resource::scope, NewScope>,
+		"The Resource scope does not match this scope" );
 		return declare(r)->provide();
 	}
 };
@@ -215,9 +235,13 @@ struct GuardedScope
 		@throws instantiation_error if contextual instantiation fails 
 	  */
 	template <typename Resource>
-	static inline typename Resource::provided_type get(const Resource& r) {
-		if(! is_active()) throw inactive_scope_error(M() << "Trying to allocate " 
-			<< r.id() << " while scope is inactive");
+	static inline typename Resource::instance_type get(const Resource& r) {
+		static_assert( std::is_same_v<typename Resource::scope, GuardedScope<Tag> >,
+		"The Resource scope does not match this scope" );
+
+		namespace u = utilities;
+		if(! is_active()) throw inactive_scope_error(u::str_builder() 
+			<< "Trying to allocate " << r.id() << " while scope is inactive");
 		return ctx.get(r);
 	}	
 
@@ -247,7 +271,8 @@ private:
 	```
 	declares a resource in GlobalScope.
   */
-struct GlobalScope {
+class GlobalScope {
+public:
 
 	/**
 		Static method that returns a resource instance in this scope.
@@ -257,15 +282,23 @@ struct GlobalScope {
 		@throws instantiation_error if contextual instantiation fails 
 	  */
 	template <typename Resource>
-	static inline typename Resource::provided_type get(const Resource& r) {
+	static inline typename Resource::instance_type get(const Resource& r) {
+		static_assert( std::is_same_v<typename Resource::scope, GlobalScope >,
+		"The Resource scope does not match this scope" );
+
 		return global_context.get(r);
 	}
 
 	/**
 		Clears the global context, disposing of all assets.
 	  */
-	static void clear() { global_context.clear(); }
-private:
+	static void clear() {
+		global_context.clear();
+		providence().clear();
+	}
+
+
+//private:
 	inline static context global_context;
 };
 

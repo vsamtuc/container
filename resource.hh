@@ -1,10 +1,5 @@
 #pragma once
 
-#include <typeindex>
-#include <unordered_set>
-
-#include "utilities.hh"
-#include "exceptions.hh"
 #include "qualifiers.hh"
 
 namespace cdi {
@@ -20,7 +15,7 @@ template <typename ... Tags> struct tag_sequence  { };
 // =====================
 
 template <typename Resource>
-struct resource_manager; 	// the basic class resouce operations
+class resource_manager; 	// the basic class resouce operations
 class GlobalScope; 			// the default scope 
 class resourceid;  			// type-erased resource id
 
@@ -30,7 +25,7 @@ std::ostream& operator<<(std::ostream&, const resourceid&);
 	A resource is a descriptor combining the type, scope and qualifiers of
 	a contextual object type.
 
-	@tparam Value the c++ type of the contextual object
+	@tparam Instance the c++ type of the contextual object
 	@tparam Scope the scope of the contextual object
 	@tparam Tags a sequence of types, which are uninterpreted
 
@@ -41,15 +36,25 @@ std::ostream& operator<<(std::ostream&, const resourceid&);
 	component. The compile-time part consists of the object type, the object
 	scope and a sequence of tags (which can be any types).
 	The run-time part consists of a set of qualifiers.
+
+	A resource can be instantiated by the container, depending on the current
+	context. At each point in time, and for each thread, a scope is associated
+	with at most one context (if it is not associated with a context, it is
+	inactive). Therefore, the same resource can instantiate different instances,
+	depending on the context.
+
+	Resource instances are managed (for lifecycle operations like creation and disposal)
+	by an associated resource_manager object (each resource has one). The user
+	configures a resource by configuring the resource manager for the resource.
   */
-template <typename Value, typename Scope=GlobalScope , typename ... Tags>
+template <typename Instance, typename Scope=GlobalScope , typename ... Tags>
 struct resource
 {
 	/// the resource type
-	typedef resource<Value, Scope, Tags...> resource_type;
+	typedef resource<Instance, Scope, Tags...> resource_type;
 
 	/// The type of the contextual object type
-	typedef Value provided_type;
+	typedef Instance instance_type;
 
 	/// The scope of the contextual object type
 	typedef Scope scope;
@@ -59,9 +64,16 @@ struct resource
 
 	/// construct an instance 
 	inline resource(const qualifiers& _q) : q(_q) { }
+	inline resource(qualifiers&& _q) : q(_q) { }
 
  	/// The qualifiers of the contextual object type
  	inline const qualifiers& quals() const { return q; }
+
+ 	//===================================================
+ 	// The following methods are all defined externally
+ 	// and constitute the main user entries to the 
+ 	// container API.
+ 	//=================================================
 
  	/// A resourceid for this resource
  	resourceid id() const;
@@ -69,9 +81,92 @@ struct resource
  	/// Return a resource manager for this resource
  	resource_manager<resource_type>* manager() const;
 
+ 	/**
+		Return a resource instance for this resource.
+
+		@return a resource instance for this resource, depending on the current
+		        context.
+		@throws instantiation_error if it failed to instantitate the resource
+
+		This function returns a resource instance of type `instance_type` for the 
+		given resource based on the current context.
+ 	  */
+ 	instance_type get() const { return scope::get(*this); }
+
+
+	template <typename Callable, typename...Args>
+	const resource_type& provide(Callable func, Args&& ... args ) const;
+
+	/**
+		Register a new injector for a resource.
+
+		@tparam Callable the callable injector
+		@tparam Args a sequence of argument types to pass to the callable
+		@param func the function called by the new disposer
+		@param args a sequence of arguments to be given to func at invocation
+		@throws config_error if a disposer already exists for this resource
+
+		This call registers a new inject function for this resource. When an 
+		instance is created, first the provider is invoked, followed by every
+		injector (of which there can be several), in the order of their declaration. 
+
+		When the created injector is invoked, the `func` is called with a non-const 
+		reference to `obj` as the first argument, followed by the same number of 
+		parameters as passed to `args`. The actual parameters following obj call 
+		are computed as for provide(). the function's return value is ignored.
+
+		The usual function of an injector is to provide to the constructed instance 
+		some value obtained by another resource. Injectors are very important in 
+		breaking dependency cycles between resources, because the container can
+		schedule their execution in the right order, when instantiating mutually
+		dependent resources.
+
+		It is the intention of the API to not hide these dependencies, so that the
+		user may gen better information. For example, consider two cases. In the
+		first (bad) case, the resource to be injected is hidden in the injector code:
+		```
+		resource<T*, ...> R({});
+		resource<U*, ...> Injected({});
+		R.provide(...).inject([](auto x){ x->field = Injected.get(); });
+		```
+		In this case the dependency of `R` on `Injected` is hidden from the container.
+		A much better approach is to replace the last line with
+		```
+		R.provide(...).inject([](auto x, auto y){ x->field = y; }, Injected);		
+		```
+
+		@see provide()
+		@see dispose()
+	 */
+	template <typename Callable, typename...Args>
+	const resource_type& inject(Callable func, Args&& ... args ) const;
+
+	/**
+		Register a new disposer for a resource.
+
+		@tparam Callable the callable disposer
+		@tparam Args a sequence of argument types to pass to the callable
+		@param func the function called by the new disposer
+		@param args a sequence of arguments to be given to func at invocation
+		@throws config_error if a disposer already exists for this resource
+
+		This call registers a dispose function for this resource. When method
+		dispose(obj) is invoked on an instance `obj` of this resource, 
+		`func` is called with a non-const reference to `obj` as the first argument, 
+		followed by the same number of parameters as passed to `args`. 
+		The actual parameters following obj call are computed as for provide()
+
+		@see provide()
+		@see dispose()
+	 */
+	template <typename Callable, typename...Args>
+	const resource_type& dispose(Callable func, Args&& ... args ) const;
+
 private:
 	const qualifiers q;
 };
+
+
 
 
 
@@ -96,6 +191,11 @@ public:
 	  */
 	resourceid(std::type_index ti, const qualifiers& q = {})
 	: sptr(std::make_shared<rid_impl>(ti,q))
+	{ }
+
+	template <typename Instance, typename Scope, typename ...Tags>
+	resourceid(const resource<Instance,Scope,Tags...>& r)
+	: resourceid(typeid(resource<Instance,Scope,Tags...>), r.quals()) 
 	{ }
 
 	// Equality comparison
@@ -163,127 +263,23 @@ inline std::ostream& operator<<(std::ostream& s, const resourceid& r)
 	return s;
 }
 
-
-
 template <typename V, typename S, typename ... T>
 resourceid resource<V,S,T...>::id() const { 
 	return resourceid(typeid(resource<V,S,T...>), quals()); 
 }
 
-/**
-	A map container mapping resources to T.
 
-	This map is implemented internally as a map-of-maps, that is,
-	MAP< typeid, MAP<qualifiers, T> >, using std::unordered_map
-	at both levels. This may change in the future.
-  */
 template <typename T>
-struct resource_map 
+struct resource_map : std::unordered_map<resourceid, T, u::hash_code<resourceid> >
 {
-	/// The type of the second-level maps
-	typedef qualifiers_map<T> qual_map;
+	typedef std::unordered_map<resourceid, T, u::hash_code<resourceid> > Super;
+	using Super::find;
+	using Super::end;
 
-	/// The type of the top-level map
-	typedef std::unordered_map<std::type_index, qual_map> type_map;
+	inline bool contains(const resourceid& rid) const { return find(rid)!=end(); }
 
-	/// Iterator for top-level map
-	typedef typename type_map::iterator type_iter;
-
-	/// Iterator for second-level maps
-	typedef typename qual_map::iterator qual_iter;
-
-	//-------------------------------------------
-	// Split API
-	//-------------------------------------------
-
-	inline bool contains_type(const std::type_index& ti) const {
-		return map.find(ti)!=map.end();
-	}
-
-	inline bool contains(const std::type_index& ti, const qualifiers& q) const {
-		return contains_type(ti) && map.at(ti).contains(q);
-	}
-
-	[[nodiscard]] auto bind(const std::type_index& ti, const qualifiers& q, const T& val) {
-		return map[ti].insert(std::make_pair(q, val));
-	}
-
-	inline const qual_map& at(const std::type_index& ti) const {
-		return map.at(ti);
-	}
-
-	inline const T& at(const std::type_index& ti, const qualifiers& q) const {
-		return map.at(ti).at(q);
-	}
-
-	auto operator[](const std::type_index& ti) { return map[ti]; }
-
-	type_map& get_map() { return map; }
-	const type_map& get_map() const { return map; }
-
-	//-------------------------------------------
-	// untyped interface (based on resourceid)
-	//-------------------------------------------
-
-	inline bool contains(const resourceid& res) const {
-		return contains_type(res.type()) 
-			&& map.at(res.type()).contains(res.quals());
-	}
-
-	[[nodiscard]] auto bind(const resourceid& res, const T& val) {
-		return bind(res.type(), res.quals(), val);
-	}
-
-	inline const T& at(const resourceid& res) const {
-		return map.at(res.type(), res.quals());
-	}
-
-	auto operator[](const resourceid& res) { return map[res.type()][res.quals()]; }
-
-
-	//
-	// templated interface (based on Resource)
-	//
-
-	template <typename Resource>
-	inline bool contains_type() const { return contains_type(typeid(Resource)); }
-
-	template <typename Resource>
-	inline bool contains(const Resource& r) const {
-		return contains_type(typeid(Resource)) && 
-			map.at(typeid(Resource)).contains(r.quals());
-	}
-
-	template <typename Resource>
-	[[nodiscard]] auto bind(const Resource& r, const T& val) {
-		return bind(typeid(Resource), r.quals(), val);
-	} 
-
-	template <typename Resource, typename ...Args>
-	auto bind_emplace(const Resource& r, Args&& ... args) {
-		return 	map[typeid(Resource)].emplace(
-				std::piecewise_construct, 
-				std::forward_as_tuple(r.quals()), 
-				std::forward_as_tuple(std::forward<Args>(args)...));
-	}
-
-	template <typename Resource>
-	const T& lookup(const Resource& r) const {
-		return map.at(typeid(Resource)).at(r.quals());
-	}
-
-	template <typename Resource>
-	T& operator[](const Resource& r) { return map[typeid(Resource)][r.quals()]; }
-
-
-	/**
-		Completely empty the container
-	  */
-	void clear() { map.clear(); }
-
-private:
-	type_map map;
 };
+
 
 /**
 	Return a resource instance for the given resource.
@@ -295,12 +291,13 @@ private:
 	This function retrieves a resource instance for the given resource
 	based on the current context.
   */
-template <typename Resource>
-inline typename Resource::provided_type inject(const Resource& r) {
-	using scope_type = typename Resource::scope;
-	return scope_type::template get< Resource >(r);
+template <typename Instance, typename Scope, typename...Tags>
+inline Instance get(const resource<Instance, Scope, Tags...>& r) {
+	return r.get();
 }
 
+template <typename Resource>
+inline auto getter(const Resource& r) { return &Resource::get; }
 
 
 } // end namespace container

@@ -143,7 +143,7 @@ private:
 			ust->free(ptr);
 		}
 	};
-	friend class Deleter;
+	friend struct Deleter;
 
 	std::unordered_set<value_type, hasher, equal_to> storage;
 
@@ -173,11 +173,19 @@ struct str_builder
 	/// Used to return a string by ending a sequence of '<<' outputs.
 	inline static const _end end;
 
+	/// explicit return of string
+	inline std::string str() { return s.str(); }
+
 	/// auto cast to string
 	inline operator std::string () { return s.str(); }
 
-	/// explicit return of string
-	inline std::string str() { return s.str(); }
+	/// explicit access to substream
+	inline auto& stream() { return s; }
+	inline auto& stream() const { return s; }
+
+	/// auto cast to ostream 
+	inline operator std::ostream& () { return stream(); }
+	inline operator const std::ostream& () const { return stream(); }
 
 	/// overload of str_builder '<<' operator
 	template <typename T>

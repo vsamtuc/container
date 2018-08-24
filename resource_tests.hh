@@ -8,8 +8,7 @@
 #include <functional>
 #include <unordered_set>
 
-#include "resource.hh"
-#include "utilities.hh"
+#include "cdi.hh"
 
 using namespace cdi;
 using namespace cdi::utilities;
@@ -20,15 +19,18 @@ class ResourceSuite : public CxxTest::TestSuite
 {
 public:
 
+	void tearDown() override {
+		GlobalScope::clear();
+	}
 
 	void test_resource()
 	{
 
-		auto R = resource<string,void>({ Default }).id();
+		auto R = resource<string,void>(Default).id();
 		TS_ASSERT_EQUALS(R.type(), type_index(typeid(resource<string,void>)));
 		TS_ASSERT_EQUALS(R.quals(), qualifiers(Default));
 
-		TS_ASSERT_EQUALS( (resource<string,void>({Default}).id()), (resource<string,void>(Default).id()) );
+		TS_ASSERT_EQUALS( (resource<string,void>(Default).id()), (resource<string,void>(Default).id()) );
 	}
 
 

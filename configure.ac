@@ -2,11 +2,11 @@
 # Process this file with autoconf to produce a configure script.
 
 AC_PREREQ([2.69])
-AC_INIT([container], [0.1.0], [vsam@softnet.tuc.gr])
+AC_INIT([CDI], [0.2.0], [vsam@softnet.tuc.gr])
 AM_INIT_AUTOMAKE
 # LT_INIT
 
-AC_CONFIG_SRCDIR([container.hh])
+AC_CONFIG_SRCDIR([cdi.hh])
 AC_CONFIG_HEADERS([config.h])
 
 AC_ARG_ENABLE(debug,
@@ -24,7 +24,7 @@ AM_CONDITIONAL(DEBUG, test x$debug = xtrue)
 AC_PROG_CXX
 AC_PROG_RANLIB
 
-DX_INIT_DOXYGEN([container])
+DX_INIT_DOXYGEN([CDI])
 DX_DOXYGEN_FEATURE(on)
 DX_DOT_FEATURE(on)
 DX_HTML_FEATURE(on)

@@ -1,17 +1,13 @@
 #pragma once
 
-#include <unordered_set>
 #include <typeinfo>
 #include <typeindex>
-#include <functional>
-#include <cassert>
 #include <ostream>
 #include <string>
-#include <memory>
 #include <algorithm>
 #include <iterator>
 
-#include "utilities.hh"
+#include "exceptions.hh"
 
 namespace cdi {
 
@@ -250,7 +246,7 @@ namespace detail {
 } // end namespace detail
 
 
-struct qualifier;
+class qualifier;
 /// Standard qualifiers
 extern qualifier Default, All, Null;
 
@@ -458,6 +454,9 @@ public:
 	{ 
 		compute_hash();
 	}
+
+	qualifiers(const qualifiers&) = default;
+	qualifiers(qualifiers&&) = default;
 
 	/**
 		Check membership in the set of a qualifier with the same type.

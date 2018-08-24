@@ -7,7 +7,7 @@
 #include <functional>
 #include <array>
 
-#include "qualifiers.hh"
+#include "cdi.hh"
 
 //---------------------------------
 // testing qualifier declarations
@@ -25,8 +25,6 @@ namespace qual_test {
 	DEFINE_QUALIFIER(Toplevel2,int,int)
 }
 
-DEFINE_QUALIFIER(Name, std::string, const std::string&)
-DEFINE_QUALIFIER(Size, size_t, size_t)
 
 using namespace cdi;
 
@@ -78,6 +76,14 @@ class QualifierSuite : public CxxTest::TestSuite
 {
 public:
 
+
+	DEFINE_QUALIFIER(Name, std::string, const std::string&)
+	DEFINE_QUALIFIER(Size, size_t, size_t)
+
+	void tearDown() override {
+		GlobalScope::clear();
+	}
+
 	void test_qualifier_constructors()
 	{
 		qualifier q;
@@ -117,7 +123,7 @@ public:
 		using M = utilities::str_builder;
 		TS_ASSERT_EQUALS((M()<< All).str(), "@cdi::All");
 		TS_ASSERT_EQUALS((M()<< Default).str(), "@cdi::Default");
-		TS_ASSERT_EQUALS((M()<< n).str(), "@Name(foo)");
+		TS_ASSERT_EQUALS((M()<< n).str(), "@QualifierSuite::Name(foo)");
 
 		TS_ASSERT(d == Default);
 		TS_ASSERT_DIFFERS(d, All);
@@ -154,6 +160,10 @@ public:
 class QualifiersSuite : public CxxTest::TestSuite
 {
 public:
+
+	DEFINE_QUALIFIER(Name, std::string, const std::string&)
+	DEFINE_QUALIFIER(Size, size_t, size_t)
+
 
 	void test_qualifiers_constructor()
 	{

@@ -6,6 +6,8 @@
 #include <iostream>
 #include <memory>
 #include <type_traits>
+#include <typeinfo>
+#include <typeindex>
 #include <functional>
 #include <unordered_set>
 #include <sstream>
@@ -23,12 +25,6 @@ using namespace std;
 //=================================
 
 
-int foovoid() { return 100; }
-int fooint(int a) { return a+10; }
-
-DEFINE_QUALIFIER(Name, string, const string&)
-
-
 struct local_scope_tag;
 
 using LocalScope = GuardedScope<local_scope_tag>;
@@ -41,9 +37,14 @@ class ProviderSuite : public CxxTest::TestSuite
 {
 public:
 
+	static int foovoid() { return 100; }
+	static int fooint(int a) { return a+10; }
+
+	DEFINE_QUALIFIER(Name, string, const string&)
+
+
 	void tearDown() override {
 		GlobalScope::clear();
-		prov_map.clear();
 	}
 
 	void test_provider_int()
@@ -60,11 +61,11 @@ public:
 		provide(Rint, fooint, Rvoid );
 
 		// at this point, we have not created Rvoid !
-		TS_ASSERT_EQUALS(inject(Rint), 110); 
+		TS_ASSERT_EQUALS(get(Rint), 110); 
 
-		TS_ASSERT_EQUALS(inject(Rval), 20); 
-		TS_ASSERT_EQUALS(bind(inject<decltype(Rval)>, Rval)(), 20 );
-		TS_ASSERT_EQUALS(inject(Rvoid), 100); 
+		TS_ASSERT_EQUALS(get(Rval), 20); 
+		TS_ASSERT_EQUALS(bind(getter(Rval), Rval)(), 20 );
+		TS_ASSERT_EQUALS(get(Rvoid), 100); 
 
 		TS_ASSERT_EQUALS(Rval.manager()->provide(), 20);
 		TS_ASSERT_EQUALS(Rvoid.manager()->provide(), 100);
@@ -85,7 +86,7 @@ public:
 		inline static int leaked = 0;
 	};
 
-	void test_provider__ptr()
+	void test_provider_ptr()
 	{
 		using RFoo = Global< shared_ptr<Foo> >;
 		auto Foo1 = RFoo({});
@@ -98,11 +99,11 @@ public:
 		provide(Foo1, []() { return make_shared<Foo>(4); });
 
 		// check the result
-		auto c = inject(Foo2);
+		auto c = get(Foo2);
 		TS_ASSERT_EQUALS(c->x, 5);
 
-		shared_ptr<Foo> a = inject(Foo1);
-		auto b = inject(Foo1);
+		shared_ptr<Foo> a = get(Foo1);
+		auto b = get(Foo1);
 
 		TS_ASSERT_EQUALS(a,b);
 		TS_ASSERT_EQUALS(a.use_count(), 3);
@@ -121,7 +122,10 @@ public:
 			auto Foo2 = RFoo(Name("foo2"));
 
 			// dependency on undeclared resource Foo1
-			provide(Foo2, [](Foo* a){ return new Foo(a->x+1); }, Foo1);
+			//provide(Foo2, [](Foo* a){ return new Foo(a->x+1); }, Foo1);
+			provide(Foo2, [](auto a){ return new Foo(a->x+1); }, Foo1);
+			TS_ASSERT_EQUALS( (declare(Foo2)->provider_injections().size()), 1);
+
 			dispose(Foo2, [](Foo*& p){ delete p; });
 
 			// declare Foo1
@@ -129,11 +133,11 @@ public:
 			dispose(Foo1, [](Foo*& p){ delete p; });
 
 			// check the result
-			auto c = inject(Foo2);
+			auto c = get(Foo2);
 			TS_ASSERT_EQUALS(c->x, 5);
 
-			Foo* a = inject(Foo1);
-			auto b = inject(Foo1);
+			Foo* a = get(Foo1);
+			auto b = get(Foo1);
 
 			TS_ASSERT_EQUALS(a,b);
 			TS_ASSERT_EQUALS(Foo::leaked, 2);
@@ -142,6 +146,83 @@ public:
 		TS_ASSERT_EQUALS(Foo::leaked, 0);
 	}
 
+	struct A {
+		int x;
+		string y;
+		double z;
+		void set_z(double _z) { z=_z; }
+	};
+
+	template <typename T, typename V, typename U>
+	void inj(T* obj, V T::*attr, U val) {
+		obj->*attr = val;
+	}
+
+	template <typename T, typename V, typename U>
+	void inj(T& obj, V T::*attr, U val) {
+		obj.*attr = val;
+	}
+
+	template <typename T, typename V, typename U>
+	void inj(T* obj, void (T::*meth)(V) , U val) {
+		(obj->*meth)(val);
+	}
+
+	template <typename T, typename V, typename U>
+	void inj(T& obj, void (T::*meth)(V) , U val) {
+		(obj.*meth)(val);
+	}
+
+
+	void test_syntax() 
+	{ 
+		A a;
+
+		inj(&a, &A::x, 4);
+		inj(a, &A::y, "hello");
+		inj(a, &A::set_z, 3.14);
+
+		TS_ASSERT_EQUALS(a.x, 4);
+		TS_ASSERT_EQUALS(a.y, "hello");
+		TS_ASSERT_EQUALS(a.z, 3.14);
+	}
+
+	#define PR(t) (u::str_builder() << #t << " -> " << u::demangle(typeid(t).name())).str()
+	#define P(V)  (u::str_builder() << #V << " -> " << V).str()
+
+	void xtest_type_traits()
+	{
+		cout << endl;
+		cout << PR(Foo*) << endl;
+		cout << PR(decay<Foo*>::type) << endl;
+		cout << PR(decay<const Foo*>::type) << endl;
+		cout << PR(decay<Foo const *>::type) << endl;
+		cout << PR(decay<Foo* const&>::type) << endl;
+
+		cout << P(is_pointer<Foo*>::value) << endl;
+		cout << P(is_pointer<Foo*&>::value) << endl;;
+		cout << P(is_object<Foo*>::value) << endl;
+
+		cout << PR(remove_reference<Foo*&&>::type) << endl;
+		cout << P(is_class<Foo*>::value) << endl;
+		cout << P(is_class<Foo&>::value) << endl;
+		cout << P(is_class<const Foo>::value) << endl;
+		cout << P(is_class<Foo*>::value) << endl;
+
+		cout << endl;
+	}
+
+	static int doubler(int x) { return 2*x; }
+	static int summer(int a, int b, int c) { return a+b+c; }
+
+	void test_bind() 
+	{
+		using std::bind;
+		using namespace std::placeholders;
+		auto f = bind(summer,_1, bind(doubler,_2), bind(doubler,_2));
+
+		TS_ASSERT_EQUALS(f(1,4), 17);
+	}
 
 };
 

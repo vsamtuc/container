@@ -2,6 +2,8 @@
 
 #include <stdexcept>
 
+#include "utilities.hh"
+
 namespace cdi {
 
 //-------------------------
@@ -36,6 +38,16 @@ struct disposal_error : exception { using exception::exception; };
   */
 struct inactive_scope_error : exception { using exception::exception; };
 
-
+inline std::ostream& 
+output_exception(std::ostream& stream, const std::exception& e, int level =  0)
+{
+    stream << std::string(level, ' ') << "exception: " << e.what() << '\n';
+    try {
+        std::rethrow_if_nested(e);
+    } catch(const std::exception& e) {
+        return output_exception(stream, e, level+1);
+    } 
+    return stream;
+}
 
 }
