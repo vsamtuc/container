@@ -20,7 +20,7 @@ class ResourceSuite : public CxxTest::TestSuite
 public:
 
 	void tearDown() override {
-		GlobalScope::clear();
+		providence().clear();
 	}
 
 	void test_resource()

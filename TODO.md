@@ -1,7 +1,7 @@
 # TO DO
 
 ## Immediate
-  - add checking for cycles in the resource table
+  - rename provision_map class to `container`
 
   - add resource<...> API for put()
 
@@ -13,7 +13,10 @@
   - fix the code, to handle storing stuff as std::decay_t<>, and getting
      const T&  (think of a string)
 
-  - rename provision_map class to `container`
+  - Make scopes non-static objects (or their contexts). This information
+    should be gotten via the container.
+
+  - add checking for cycles in the resource table
 
 
 ## Next steps

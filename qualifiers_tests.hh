@@ -81,7 +81,7 @@ public:
 	DEFINE_QUALIFIER(Size, size_t, size_t)
 
 	void tearDown() override {
-		GlobalScope::clear();
+		providence().clear();
 	}
 
 	void test_qualifier_constructors()

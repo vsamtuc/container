@@ -14,7 +14,7 @@ AM_CXXFLAGS+= $(HDF5_CPPFLAGS) $(JSONCPP_CPPFLAGS)
 
 lib_LIBRARIES= 
 
-include_HEADERS= cdi.hh exceptions.hh qualifiers.hh resource.hh provider.hh
+include_HEADERS= cdi.hh scope.hh exceptions.hh qualifiers.hh resource.hh contextual.hh container.hh
 
 EXTRA_DIST= $(include_HEADERS)
 

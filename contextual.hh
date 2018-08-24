@@ -215,49 +215,16 @@ public:
 	: contextual_type(r.id())
 	{ }
 
+	static inline resource_manager<Resource>* get(const Resource& r);
+
 private:
 	detail::typed_call<instance_type()> prov;
 	detail::typed_call<void(instance_type&)> disp;
 };
 
 
-struct provision_map : resource_map<basic_resource_manager*> 
-{
-	template <typename Resource>
-	inline resource_manager<Resource>* get(const Resource& r) {
-		basic_resource_manager* p;
-		try {
-			p = this->at(r);
-			return static_cast<resource_manager<Resource>*>(p);
-		} catch(std::out_of_range) {
-			auto rm = new resource_manager<Resource>(r); 
-			bool succ [[maybe_unused]];
-			std::tie(std::ignore, succ) = emplace(r, rm);
-			assert(succ); // since we just failed the lookup!
-			// call recursively!
-			return get(r);
-		}
-	}
-
-
-private:
-	void clear() {
-		// Delete all resource managers
-		for(auto& [rid  ,rm] : *this) { 
-			(void) rid;//maybe unused?
-			delete rm; 
-		}
-		resource_map<basic_resource_manager*>::clear();
-	}
-	friend class GlobalScope;
-};
-
-
-inline provision_map& providence() { 
-	static provision_map prov_map;	
-	return prov_map; 
-}
-
+//class provision_map;
+//inline provision_map& providence();
 
 
 //====================================================
@@ -269,7 +236,9 @@ inline provision_map& providence() {
 template <typename Instance, typename Scope, typename...Tags>
 resource_manager< resource<Instance,Scope,Tags...> >* 
 resource<Instance,Scope,Tags...>::manager() const { 
-	return providence().get(*this);
+	//return providence().get(*this);
+	return resource_manager< resource<Instance,Scope,Tags...> >::get(*this);
+
 }
 
 
@@ -305,71 +274,6 @@ resource<Instance, Scope,Tags...>::dispose(Callable func, Args&& ... args ) cons
 }
 
 
-//==================================================
-//
-// Functional resource API
-//
-//==================================================
-
-
-/**
-	Return the resource manager for a resource
-	@tparam Resource the resource type
-	@param r the resource
-	@return the resource manager for this resource
-  */
-template <typename Resource>
-inline resource_manager<Resource>* declare(const Resource& r) { return r.manager(); }
-
-/**
-	Register a new provider for a resource.
-
-	@tparam Resource the resource type
-	@tparam Callable the callable provider
-	@tparam Args a sequence of argument types to pass to the callable
-	@param r the resource to be provisioned with a provider
-	@param func the function called by the new provider
-	@param args a sequence of arguments to be given to func at invocation
-	@throws config_error if a provider already exists for this resource
-
-	This call registers a new provider for resource `r`. When method
-	provide() is invoked on the provider, `func` is called with the same
-	number of parameters as passed to `args`. The actual parameters to
-	the call are computed as follows:
-	* if an argument is a resource instance, the resource will be
-	  injected at the time `func` is called.
-	* if an argument is any other type, the argument is stored and
-	  provided to `func` when it is called.
-	The requirements for (non-resource) arguments are the same as in std::bind().
- */
-template <typename Resource, typename Callable,	typename ... Args>
-inline auto provide(const Resource& r, Callable&& func, Args&& ... args  )
-{
-	return r.provide(std::forward<Callable>(func), std::forward<Args>(args)...);
-}
-
-
-/**
-	Register a new disposer for a resource.
-
-	@tparam Resource the resource type
-	@tparam Callable the callable disposer
-	@tparam Args a sequence of argument types to pass to the callable
-	@param r the resource to be provisioned with a disposer
-	@param func the function called by the new disposer
-	@param args a sequence of arguments to be given to func at invocation
-	@throws config_error if a disposer already exists for this resource
-
-	This is a wrapper function for r.dispose(...).
-	
-	@see resource::dispose()
-	@see provide()
- */
-template <typename Resource, typename Callable, typename...Args>
-inline auto dispose(const Resource& r, Callable&& func, Args&& ... args )
-{
-	return r.dispose(std::forward<Callable>(func), std::forward<Args>(args)...);
-}
 
 
 

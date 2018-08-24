@@ -44,7 +44,7 @@ public:
 
 
 	void tearDown() override {
-		GlobalScope::clear();
+		providence().clear();
 	}
 
 	void test_provider_int()
@@ -64,7 +64,7 @@ public:
 		TS_ASSERT_EQUALS(get(Rint), 110); 
 
 		TS_ASSERT_EQUALS(get(Rval), 20); 
-		TS_ASSERT_EQUALS(bind(getter(Rval), Rval)(), 20 );
+		TS_ASSERT_EQUALS(bind(&decltype(Rval)::get, Rval)(), 20 );
 		TS_ASSERT_EQUALS(get(Rvoid), 100); 
 
 		TS_ASSERT_EQUALS(Rval.manager()->provide(), 20);

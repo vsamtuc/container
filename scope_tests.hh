@@ -36,7 +36,7 @@ public:
 
 
 	void tearDown() override { 
-		GlobalScope::clear();
+		providence().clear();
 	}
 
 	void test_new_scope() 
