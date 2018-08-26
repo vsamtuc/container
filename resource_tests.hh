@@ -1,12 +1,6 @@
 #pragma once
 
 #include <cxxtest/TestSuite.h>
-#include <jsoncpp/json/json.h>
-
-#include <memory>
-#include <type_traits>
-#include <functional>
-#include <unordered_set>
 
 #include "cdi.hh"
 

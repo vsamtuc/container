@@ -22,33 +22,44 @@ namespace cdi {
 	on resources.
   */
 
-class container : resource_map<contextual_base*> 
+class container
 {
 public:
 
-	using resource_map<contextual_base*>::at;
-	using resource_map<contextual_base*>::begin;
-	using resource_map<contextual_base*>::end;
-	using resource_map<contextual_base*>::size;
-	using resource_map<contextual_base*>::contains;
+	inline auto at(const resourceid& r) { return rms.at(r); }
+
+	template <typename Resource>
+	inline resource_manager<Resource>* get_declared(const Resource& r) {
+		try {
+			return static_cast<resource_manager<Resource>*>(rms.at(r));
+		} catch(std::out_of_range) {
+			return nullptr;
+		}
+	}
 
 	template <typename Resource>
 	inline resource_manager<Resource>* get(const Resource& r) {
 		try {
-			return static_cast<resource_manager<Resource>*>(this->at(r));
+			return static_cast<resource_manager<Resource>*>(rms.at(r));
 		} catch(std::out_of_range) {
 			auto rm = new resource_manager<Resource>(r); 
 			bool succ [[maybe_unused]];
-			std::tie(std::ignore, succ) = emplace(r, rm);
+			std::tie(std::ignore, succ) = rms.emplace(r, rm);
 			assert(succ); // since we just failed the lookup!
-			// call recursively!
-			return get(r);
+			return rm;
 		}
+	}
+
+	inline auto resource_managers() const { return rms; }
+
+	void check_container() {
+
 	}
 
 	void clear();
 
 private:
+	resource_map<contextual_base*> rms;
 };
 
 

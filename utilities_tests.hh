@@ -1,7 +1,6 @@
 #pragma once
 
 #include <cxxtest/TestSuite.h>
-#include <jsoncpp/json/json.h>
 
 #include <memory>
 #include <type_traits>

@@ -3,20 +3,16 @@
 ## Immediate
   - add resource<...> API for put()
 
-  - add convenience API for injection etc.
-
-  - Fix unwrap_inject to allow resource types to be passed
-    explicitly
+  - Allow unwrap_inject to support resource types to be passed
+    explicitly. Currently, any resource<...>-typed object gets injected
+    into the call.
 
   - fix the code, to handle storing stuff as std::decay_t<>, and getting
      const T&  (think of a string)
 
   - Rethink the scope API, to make it easy to write new ones. 
 
-  - Scopes should not use static variables (including context). They
-    should use the container. What about thread_local ?
-
-  - add checking for cycles in the resource table
+  - add checking in the container
 
 
 ## Next steps
@@ -30,7 +26,7 @@
   	but must have qualifier provide the scope!
 
 
-## Future
+## Future/open
   - support multithreading (maybe not too hard)
 
   - faster qualifiers equality (cache?)
@@ -45,3 +41,7 @@
 
   - what is the purpose of 'class resource_manager'? All the info is in
     'class contextual'
+
+  - Scopes could not use static variables (including context). They
+    could use the container. Problem: what about thread_local ?
+

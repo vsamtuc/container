@@ -117,7 +117,9 @@ public:
 		assert(! ass.object().has_value());
 
 		try {
-			resource_manager<Resource>* rm = declare(r);
+			resource_manager<Resource>* rm = providence().get_declared(r);
+			if(rm==nullptr)
+				throw instantiation_error(u::str_builder() << "In creating instance, undeclared resource " << r);
 			ass.object() = rm->provide();
 			rm->inject(ass.get_object_ref<instance_type>());
 			return ass.get_object<instance_type>();
@@ -313,11 +315,11 @@ inline void container::clear() {
 	GlobalScope::clear();
 
 	// Delete all resource managers
-	for(auto& [rid  ,rm] : *this) { 
+	for(auto& [rid  ,rm] : rms) { 
 		(void) rid;//maybe unused?
 		delete rm;
 	}
-	resource_map<contextual_base*>::clear();
+	rms.clear();
 }
 
 

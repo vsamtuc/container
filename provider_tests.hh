@@ -208,22 +208,6 @@ public:
 		cout << endl;
 	}
 
-	static int doubler(int x) { return 2*x; }
-	static int summer(int a, int b, int c) { return a+b+c; }
-
-	struct C : A {};	
-
-	void test_bind() 
-	{
-		using std::bind;
-		using namespace std::placeholders;
-		auto f = bind(summer,_1, bind(doubler,_2), bind(doubler,_2));
-
-		C p;
-		A& q = p;
-
-		TS_ASSERT_EQUALS(f(1,4), 17);
-	}
 
 };
 

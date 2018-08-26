@@ -64,13 +64,13 @@ public:
 
 	void test_global_scope2()
 	{
-		TS_ASSERT_EQUALS(providence().size(), 0);
+		TS_ASSERT_EQUALS(providence().resource_managers().size(), 0);
 
 		auto r1 = resource<std::shared_ptr<Foo>, GlobalScope>({});
 		auto rm1 = declare(r1);
 		TS_ASSERT_EQUALS(rm1, declare(r1));
 		provide(r1, [](){ return std::make_shared<Foo>(42); });
-		TS_ASSERT(providence().contains(r1));
+		TS_ASSERT(providence().resource_managers().contains(r1));
 		auto ptr = r1.get();
 		TS_ASSERT_EQUALS(ptr->x, 42);
 	}
@@ -81,7 +81,7 @@ public:
 
 		provide(A::rsrc, [](B*o){ return new A(o); }, rb);
 		provide(rb, [](A*o){ return new B(o); }, A::rsrc);
-		TS_ASSERT_EQUALS(providence().size(), 2);
+		TS_ASSERT_EQUALS(providence().resource_managers().size(), 2);
 
 		try {
 			auto x = A::rsrc.get()->other;
@@ -108,7 +108,7 @@ public:
 		rb	.provide([](){ return new B(nullptr); })
 			.dispose([](auto self) { delete self; });
 
-		TS_ASSERT_EQUALS(providence().size(), 2);
+		TS_ASSERT_EQUALS(providence().resource_managers().size(), 2);
 		TS_ASSERT_EQUALS(ra.get()->other, rb.get());
 	}
 

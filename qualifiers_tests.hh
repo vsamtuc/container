@@ -1,11 +1,6 @@
 #pragma once
 
 #include <cxxtest/TestSuite.h>
-#include <jsoncpp/json/json.h>
-
-#include <memory>
-#include <functional>
-#include <array>
 
 #include "cdi.hh"
 
@@ -333,10 +328,10 @@ public:
 	{
 		using std::vector;
 		vector<qualifier> foo = { Name("gi"), All, Default, All, All };
-		qualifiers q({});
+		qualifiers q({Name("foo")});
 		q.update(foo.begin(), foo.end());
 
-		cout << q << endl;
+		TS_ASSERT_EQUALS(q, qualifiers({All, Default, Name("gi")}));
 	}
 
 

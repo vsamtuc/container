@@ -89,7 +89,11 @@ struct resource
  	/// A resourceid for this resource
  	resourceid id() const;
 
- 	/// Return a resource manager for this resource
+ 	/**
+ 		Return a resource manager for this resource.
+
+ 		If a resource did not have one, it will be created;
+ 	  */
  	resource_manager<resource_type>* manager() const;
 
  	/**
@@ -103,6 +107,9 @@ struct resource
 		given resource based on the current context.
  	  */
  	instance_type get() const { return scope::get(*this); }
+
+ 	/// Declare a resource as having a resource manager
+ 	inline const resource_type& declare() const { manager(); return (*this); }
 
 
 	template <typename Callable, typename...Args>
