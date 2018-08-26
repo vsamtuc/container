@@ -14,14 +14,14 @@
 namespace cdi {
 
 // forward
-class basic_resource_manager;
+class contextual_base;
 
 /** 
 	This sequence container is returned by the 
 	type-erase resource manager, to denote known injections
 	of resources to lifecycle calls.
  */
-typedef std::vector<basic_resource_manager*> injection_list;
+typedef std::vector<contextual_base*> injection_list;
 
 namespace detail {
 	//
@@ -57,17 +57,17 @@ namespace detail {
 
 	This class provides a type-erased management interface.
   */
-class basic_resource_manager
+class contextual_base
 {
 public:
 	/** Construct manager for a resourceid 
 		@param r the resource id
 	  */
-	basic_resource_manager(const resourceid& r) 
+	contextual_base(const resourceid& r) 
 	: _rid(r) { }
 
 	/** Virtual destructor */
-	virtual ~basic_resource_manager() { }
+	virtual ~contextual_base() { }
 
 	/** The resource id of the managed resource */
 	inline resourceid rid() const { return _rid; }
@@ -93,11 +93,11 @@ private:
 	instances that only depends on the instance type.
   */
 template <typename Instance>
-class contextual : public basic_resource_manager
+class contextual : public contextual_base
 {
 public:
 	contextual(const resourceid& rid)
-	: basic_resource_manager(rid) { }
+	: contextual_base(rid) { }
 
 	typedef Instance instance_type;
 
@@ -217,9 +217,6 @@ public:
 
 	static inline resource_manager<Resource>* get(const Resource& r);
 
-private:
-	detail::typed_call<instance_type()> prov;
-	detail::typed_call<void(instance_type&)> disp;
 };
 
 

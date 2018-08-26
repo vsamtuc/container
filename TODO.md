@@ -1,8 +1,6 @@
 # TO DO
 
 ## Immediate
-  - rename provision_map class to `container`
-
   - add resource<...> API for put()
 
   - add convenience API for injection etc.
@@ -13,8 +11,10 @@
   - fix the code, to handle storing stuff as std::decay_t<>, and getting
      const T&  (think of a string)
 
-  - Make scopes non-static objects (or their contexts). This information
-    should be gotten via the container.
+  - Rethink the scope API, to make it easy to write new ones. 
+
+  - Scopes should not use static variables (including context). They
+    should use the container. What about thread_local ?
 
   - add checking for cycles in the resource table
 

@@ -14,13 +14,15 @@ namespace cdi {
 namespace u = utilities;
 using std::string;
 
+#define QUAL_SUFFIX  "$qualifier"
+#define QUAL_CLASS(qual) qual##$qualifier
 
 /**
 	Base class for qualifier state implementation.
 
 	This is an abstract class, that requires two abstract virtual
 	methods to be defined by a subclass. Every qualifier class must
-	inherit publically from this class. 
+	inherit publicly from this class. 
 
 	The qualifier class can contain additional state. In order to
 	work correctly with `qual_base`, the subclass must provide
@@ -30,21 +32,27 @@ using std::string;
 	  3. an output function for printing the additional state
 
 	In the following example, qualifier type `Foo` is implemented by
-	class `Foo$qualifier`, and provides additional state (in this case, 
+	class `QUAL_CLASS(Foo)`.  QUAL_CLASS is a preprocessor macro that 
+	mangles the name `Foo` by adding a suffix. The default suffix is
+	'$qualifier', which introduces a '$' into the name. If this is 
+	a problem, you can change the definition of the two macros
+	QUAL_CLASS and QUAL_SUFFIX, to something your compiler will dig.
+
+	QUAL_CLASS(Foo) and provides additional state (in this case, 
 	an integer field `x`). A possible implementation is the following:
 	```
-	struct Foo$qualifier : qual_base 
+	struct QUAL_CLASS(Foo) : qual_base 
 	{
 		// call constructor of qual_base
-		Foo$qualifier(int _x) 
-		:	qual_base(typid(Foo$qualifier), std::hash<int>()(x))), 
+		QUAL_CLASS(Foo)(int _x) 
+		:	qual_base(typid(QUAL_CLASS(Foo)), std::hash<int>()(x))), 
 			x(_x)
 		{ }
 
 		// provide equality test including the value of x
 		virtual bool equals(const qual_base& other) const override {
 			return qual_base::equals(other) && 
-				x == static_cast<const Foo$qualifier&>(other).x;
+				x == static_cast<const QUAL_CLASS(Foo)&>(other).x;
 		}
 
 		// provide output function
@@ -87,18 +95,24 @@ struct qual_base
 	virtual ~qual_base() { }
 
 	/**
+		The qualifier name suffix
+	  */
+	static inline const std::string qual_suffix = QUAL_SUFFIX;
+
+	/**
 		Return the name of the qualifier type. 
 		@return the qualifier type name.
 
 		The qualifier type name is computed from the full class name 
-		of the qualifier type (e.g., `"Foo$qualifier"`), but dropping
-		the suffix `"$qualifier"`, if it exists.
+		of the qualifier type (e.g., `"QUAL_CLASS(Foo)"`), but dropping
+		the suffix QUAL_SUFFIX, if it exists.
 	  */
 	virtual string name() const {
 		string ret = u::demangle(type().name()); 
-		// remove the "standard" suffix of "$qualifier"
-		if(ret.size() > 10 && std::equal(ret.end()-10, ret.end(), "$qualifier"))
-			ret.resize(ret.size()-10);
+		// Remove a suffix if one is there! If not, leave the name as is.
+		if(ret.size() > qual_suffix.size() 
+			&& std::equal(ret.end()-qual_suffix.size(), ret.end(), qual_suffix.begin()))
+			ret.resize(ret.size()-qual_suffix.size());
 		return ret;
 	}
 
@@ -122,6 +136,13 @@ struct qual_base
 	  */
 	virtual inline bool equals(const qual_base& other) const {
 		return (hcode==other.hcode) && (type()==other.type());
+	}
+
+	/**
+		Match this qualifier to another qualifier.	
+	  */
+	virtual inline bool matches(const qual_base& other) const {
+		return equals(other);
 	}
 
 	/**
@@ -265,36 +286,33 @@ extern qualifier Default, All, Null;
 	There are some standard qualifiers: `Default` and 'All'.
 
 	Each qualifier is associated with a distinct class. The class for
-	`Default` is `cdi::Default$qualifier` and for All it is
-	`All$qualifier`.
+	`Default` is `QUAL_CLASS(cdi::Default)` and for All it is
+	`QUAL_CLASS(cdi::All)`.
 
 	To define a custom qualifier type, say `Foo`, you declare a new class
 	as follows:
 	```
 	use cdi::detail::qual_impl;
 
-	struct Foo$qualifier : qual_impl<Foo$qualifier> {
-		using qual_impl<Foo$qualifier>::qual_impl;
+	struct QUAL_CLASS(Foo) : qual_impl<QUAL_CLASS(Foo)> {
+		using qual_impl<QUAL_CLASS(Foo)>::qual_impl;
 	};
 	extern qualifier Foo;
 	```
 	Then you can define `Foo` as
 	```
-	qualifier Foo { new Foo$qualifier; }
+	qualifier Foo { new QUAL_CLASS(Foo); }
 	```
 
 	To define a qualifier with an argument of some type, e.g. string, do
 	```
 	// Declare
-	struct Foo$qualifier : qual_impl<Foo$qualifier, string> {
-		using qual_impl<Foo$qualifier>::qual_impl;
+	struct QUAL_CLASS(Foo) : qual_impl<QUAL_CLASS(Foo), string> {
+		using qual_impl<QUAL_CLASS(Foo)>::qual_impl;
 	};
-	qualifier Foo(const string& val) { return qualifier(new Foo$qualifier(val)); }
+	qualifier Foo(const string& val) { return qualifier(new QUAL_CLASS(Foo)(val)); }
 
 	```
-
-	The suffix `$qualifier` in the class names will be removed to derive the name of
-	the new qualifier type.
 
 	There are two convenience macros `DEFINE_VOID_QUALIFIER` and `DEFINE_QUALIFIER`
 	that help with the above boilerplate.
@@ -332,6 +350,10 @@ public:
 	/// Inequality operator
 	inline bool operator!=(const qualifier& other) const {
 		return !((*this)==other);
+	}
+
+	inline bool matches(const qualifier& other) const {
+		return sptr->matches( * other.sptr );
 	}
 
 	/// Qualifier name. 
@@ -374,7 +396,7 @@ public:
 		Example:
 		```
 		qualifier q = Default;
-		auto qimpl = q.get<cdi::Default$qualifier>();
+		auto qimpl = q.get<QUAL_CLASS(cdi::Default)>();
 		```
 	  */
 	template <typename QualType>
@@ -395,32 +417,38 @@ inline std::ostream& operator<<(std::ostream& s, const qualifier& q)
 }
 
 
+#define DEFINE_VOID_QUALIFIER_CUSTOM(qname, body) \
+struct QUAL_CLASS(qname) : cdi::detail::qual_impl< QUAL_CLASS(qname) > { \
+	using cdi::detail::qual_impl< QUAL_CLASS(qname) >::qual_impl; \
+	body \
+};\
+inline cdi::qualifier qname { new QUAL_CLASS(qname)() };\
 
 
 /**
 	Macro to easily define a qualifier type with no additional state.
   */
-#define DEFINE_VOID_QUALIFIER(qname) \
-struct qname##$qualifier : cdi::detail::qual_impl< qname##$qualifier> { \
-	using cdi::detail::qual_impl< qname##$qualifier>::qual_impl; \
-};\
-inline cdi::qualifier qname { new qname##$qualifier() };\
+#define DEFINE_VOID_QUALIFIER(qname) DEFINE_VOID_QUALIFIER_CUSTOM(qname, )
 
 
 /**
 	Macro to easily define a qualifier type with additional state.
   */
-#define DEFINE_QUALIFIER(qname, qvalue_type, arg_type) \
-struct qname##$qualifier : cdi::detail::qual_impl< qname##$qualifier, qvalue_type> { \
-	using cdi::detail::qual_impl< qname##$qualifier, qvalue_type>::qual_impl; \
+#define DEFINE_QUALIFIER_CUSTOM(qname, qvalue_type, arg_type, body) \
+struct QUAL_CLASS(qname) : cdi::detail::qual_impl< QUAL_CLASS(qname), qvalue_type> { \
+	using cdi::detail::qual_impl< QUAL_CLASS(qname), qvalue_type>::qual_impl; \
+	body \
 };\
-inline cdi::qualifier qname(arg_type val) { return cdi::qualifier(new qname##$qualifier(val)); }\
+inline cdi::qualifier qname(arg_type val) { return cdi::qualifier(new QUAL_CLASS(qname)(val)); }\
+
+#define DEFINE_QUALIFIER(qname, qvalue_type, arg_type) DEFINE_QUALIFIER_CUSTOM(qname,qvalue_type,arg_type,)
 
 
-DEFINE_VOID_QUALIFIER(All)
-DEFINE_VOID_QUALIFIER(Null)
 DEFINE_VOID_QUALIFIER(Default)
-
+DEFINE_VOID_QUALIFIER_CUSTOM(All,
+	inline bool matches(const qual_base& other) const override { return true; }
+	)
+DEFINE_VOID_QUALIFIER(Null)
 
 
 
@@ -486,31 +514,39 @@ public:
 	inline size_t size() const { return qset.size(); }
 
 	/**
-		Return true if this set (query) matches an asset.
+		Return true if this set matches another.
 
-		The rule: let Q be `this`, and R be `other`.
-		If `Any` is in `Q` then, 
-		    return   (Q- {Any}) subset of R.
-		Else 
-			return  Q is equal to R.
+		@param other the other set
+		@return true if this matches other
 
+		The definition is
+		```
+		every qual in this matches something in other
+		and for every qual in other, something in this matches it
+		```
+
+		Since mathcing between qualifiers is an arbitrary relation,
+		this relation is also arbitrary.
 	  */
 	bool matches(const qualifiers& other) const
 	{
-		if(size() > other.size()+1) 
-			return false;
-		if(contains(All)) {
-			// find everything except All in other.
-			for(auto& q : qset) {
-				if(q==All)
-					continue;
-				if(! other.contains(q))
-					return false;
-			}
-			return true;
-		} 
-		return (*this)==other;
+		// check that everything in this matches something in other
+		for(auto& a : qset) {
+			bool matched=false;
+			for(auto& b : other.qset) 
+				if(a.matches(b)) { matched=true; break; }
+			if(! matched) return false;
+		}
+		for(auto& b : other.qset) {
+			bool matched=false;
+			for(auto& a: qset)
+				if(a.matches(b)) { matched=true; break; }
+			if(! matched) return false;
+		}
+		return true;
 	}
+
+
 
 	/// Checks set equality
 	inline bool operator==(const qualifiers& other) const

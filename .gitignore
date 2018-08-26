@@ -30,3 +30,13 @@
 *.exe
 *.out
 *.app
+
+# generated tests files
+*_tests.cc
+*_tests.log
+*.trs
+
+# autotools generated files
+Makefile
+Makefile.in
+config.*

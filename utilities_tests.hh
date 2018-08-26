@@ -19,7 +19,7 @@ using std::cout;
 
 using namespace cdi::utilities;
 
-class UniqueStorageSuite : public CxxTest::TestSuite
+class UtilitiesTestSuite : public CxxTest::TestSuite
 {
 public:
 

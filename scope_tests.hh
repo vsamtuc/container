@@ -9,7 +9,7 @@ using namespace std;
 using namespace cdi;
 
 
-class NewScopeSuite : public CxxTest::TestSuite
+class ScopeTestSuite : public CxxTest::TestSuite
 {
 public:
 
@@ -28,6 +28,9 @@ public:
 
 		B* other;
 		A(B* o) : other(o) { }
+
+		B* get_other() { return other; }
+
 	};
 	struct B {
 		A* other;
@@ -127,5 +130,6 @@ public:
 		TS_ASSERT_EQUALS(a->other, b);
 		TS_ASSERT_EQUALS(b->other, a);
 	}
+
 
 };

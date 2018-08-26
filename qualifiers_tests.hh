@@ -35,10 +35,10 @@ using namespace cdi;
 // Define traits
 
 
-struct Point$qualifier : qual_base
+struct QUAL_CLASS(Point) : qual_base
 {
-	Point$qualifier(double x, double y)
-	: qual_base(typeid(Point$qualifier), 0) , _x(x), _y(y)
+	QUAL_CLASS(Point)(double x, double y)
+	: qual_base(typeid(QUAL_CLASS(Point)), 0) , _x(x), _y(y)
 	{ 
 		std::hash<double> hf;
 		size_t vhash = hf(x) ^ hf(y);
@@ -47,7 +47,7 @@ struct Point$qualifier : qual_base
 
 	virtual bool equals(const qual_base& other) const override {
 		if (qual_base::equals(other)) {
-			auto& o = static_cast<const Point$qualifier&>(other);
+			auto& o = static_cast<const QUAL_CLASS(Point)&>(other);
 			return x()==o.x() && y()==o.y();
 		}
 		return false;
@@ -64,7 +64,7 @@ private:
 	double _x, _y;
 };
 inline qualifier Point(double x, double y) {
-	return qualifier(new Point$qualifier(x,y));
+	return qualifier(new QUAL_CLASS(Point)(x,y));
 }
 
 
@@ -79,6 +79,7 @@ public:
 
 	DEFINE_QUALIFIER(Name, std::string, const std::string&)
 	DEFINE_QUALIFIER(Size, size_t, size_t)
+
 
 	void tearDown() override {
 		providence().clear();
@@ -136,12 +137,12 @@ public:
 		TS_ASSERT_EQUALS(n.value<string>(), "foo");
 		TS_ASSERT_THROWS(n.value<int>(), std::bad_cast);
 
-		auto nimpl = n.get<Name$qualifier>();
+		auto nimpl = n.get<QUAL_CLASS(Name)>();
 		TS_ASSERT(nimpl);
 		TS_ASSERT_EQUALS(nimpl->value(), "foo");
 
-		TS_ASSERT_EQUALS(Default.get<Name$qualifier>(), nullptr);
-		TS_ASSERT(! (n.get<Size$qualifier>()));
+		TS_ASSERT_EQUALS(Default.get<QUAL_CLASS(Name)>(), nullptr);
+		TS_ASSERT(! (n.get<QUAL_CLASS(Size)>()));
 	}
 
 	void test_point()
@@ -163,7 +164,6 @@ public:
 
 	DEFINE_QUALIFIER(Name, std::string, const std::string&)
 	DEFINE_QUALIFIER(Size, size_t, size_t)
-
 
 	void test_qualifiers_constructor()
 	{
@@ -254,7 +254,7 @@ public:
 		qualifiers afoo({All, Name("foo")});		
 		qualifiers abar({All, Name("bar")});
 
-		TS_ASSERT(all.matches(qe));
+		TS_ASSERT(! all.matches(qe));
 		TS_ASSERT(all.matches(dflt));
 		TS_ASSERT(all.matches(dfoo));
 		TS_ASSERT(all.matches(foo));
@@ -310,9 +310,33 @@ public:
 		check_hash(abar);
 	}
 
-	void test_insert()
+	void test_mutating()
 	{
+		qualifiers q({});
+		q.update(All);
+		TS_ASSERT_EQUALS(q, qualifiers({All}));
 
+		// update finds the name
+		q.update(Name("foo"));
+		TS_ASSERT(! q.contains(Name("bar")));
+		q.update(Name("bar"));
+		TS_ASSERT( q.contains(Name("bar")));
+
+		q.delete_equal(Name("foo"));
+		TS_ASSERT( q.contains(Name("bar")));
+
+		q.delete_similar(Name("foo"));
+		TS_ASSERT(! q.contains(Name("bar")));
+	}
+
+	void test_set_update()
+	{
+		using std::vector;
+		vector<qualifier> foo = { Name("gi"), All, Default, All, All };
+		qualifiers q({});
+		q.update(foo.begin(), foo.end());
+
+		cout << q << endl;
 	}
 
 

@@ -1,22 +1,21 @@
 #pragma once
 
 #include <cxxtest/TestSuite.h>
-#include <boost/core/demangle.hpp>
 
 #include <iostream>
-#include <memory>
-#include <type_traits>
-#include <typeinfo>
-#include <typeindex>
-#include <functional>
-#include <unordered_set>
-#include <sstream>
-
 #include "cdi.hh"
 
 using namespace cdi;
-using namespace cdi::utilities;
 using namespace std;
+
+class InContainer : public CxxTest::TestSuite
+{
+	void tearDown() {
+		providence().clear();
+	}
+
+};
+
 
 //=================================
 //
@@ -33,7 +32,8 @@ template <typename Value, typename ...Tags>
 using Local = resource<Value, LocalScope , Tags...>;
 
 
-class ProviderSuite : public CxxTest::TestSuite
+
+class ProviderSuite : public InContainer
 {
 public:
 
@@ -42,10 +42,6 @@ public:
 
 	DEFINE_QUALIFIER(Name, string, const string&)
 
-
-	void tearDown() override {
-		providence().clear();
-	}
 
 	void test_provider_int()
 	{
@@ -215,11 +211,16 @@ public:
 	static int doubler(int x) { return 2*x; }
 	static int summer(int a, int b, int c) { return a+b+c; }
 
+	struct C : A {};	
+
 	void test_bind() 
 	{
 		using std::bind;
 		using namespace std::placeholders;
 		auto f = bind(summer,_1, bind(doubler,_2), bind(doubler,_2));
+
+		C p;
+		A& q = p;
 
 		TS_ASSERT_EQUALS(f(1,4), 17);
 	}

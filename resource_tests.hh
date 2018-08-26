@@ -19,7 +19,7 @@ class ResourceSuite : public CxxTest::TestSuite
 {
 public:
 
-	void tearDown() override {
+	void tearDown() {
 		providence().clear();
 	}
 
