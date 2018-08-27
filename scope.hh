@@ -131,6 +131,8 @@ public:
 
 	/**
 	   Empty the context, disposing all resource instances.
+
+	   This method is executed by the destructor as well.
 	  */
 	void clear() {
 		// call dispose on every object in the asset map
@@ -147,7 +149,16 @@ public:
 		asset_map.clear();
 	}
 
-//private:
+	/**
+		Dispose the contents and destroy the context.
+		*/
+	~context() {
+		try {
+			clear();
+		} catch(...) { }
+	}
+
+private:
 	resource_map<asset> asset_map;
 };
 
