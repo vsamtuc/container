@@ -16,8 +16,8 @@ namespace cdi {
 // forward
 class contextual_base;
 
-/** 
-	This sequence container is returned by the 
+/**
+	This sequence container is returned by the
 	type-erase resource manager, to denote known injections
 	of resources to lifecycle calls.
  */
@@ -29,19 +29,19 @@ namespace detail {
 	//
 
 	// A call is a base class for dependencies of lifecycle calls
-	struct call { 
+	struct call {
 		template <typename Arg>
-		constexpr Arg unwrap_inject(Arg arg) {  
-			return arg;  
+		constexpr Arg unwrap_inject(Arg arg) {
+			return arg;
 		}
 
 		template <typename Arg, typename Scope, typename...Tags>
-		inline auto unwrap_inject(const resource<Arg, Scope, Tags...> & res) 
-		{ 
+		inline auto unwrap_inject(const resource<Arg, Scope, Tags...> & res)
+		{
 			injected.push_back(res.manager());
 			return std::bind(std::mem_fn(&resource<Arg, Scope, Tags...>::get), res);
 		}
-		injection_list injected; 
+		injection_list injected;
 	};
 
 	// a lifecycle call
@@ -60,10 +60,10 @@ namespace detail {
 class contextual_base
 {
 public:
-	/** Construct manager for a resourceid 
+	/** Construct manager for a resourceid
 		@param r the resource id
 	  */
-	contextual_base(const resourceid& r) 
+	contextual_base(const resourceid& r)
 	: _rid(r) { }
 
 	/** Virtual destructor */
@@ -106,7 +106,7 @@ public:
 	void provider(Callable&& func, Args&& ... args  )
 	{
 		prov.injected.clear();
- 		prov.func = std::bind(std::forward<Callable>(func), 
+ 		prov.func = std::bind(std::forward<Callable>(func),
  			prov.unwrap_inject(std::forward<Args>(args))... );
 	}
 
@@ -116,7 +116,7 @@ public:
 	{
  		using namespace std::placeholders;
  		disp.injected.clear();
- 		disp.func = std::bind(std::forward<Callable>(func), 
+ 		disp.func = std::bind(std::forward<Callable>(func),
  			_1, disp.unwrap_inject(std::forward<Args>(args))... );
 	}
 
@@ -124,9 +124,9 @@ public:
 	void injector(Callable&& func, Args&& ... args )
 	{
  		using namespace std::placeholders;
- 		injectors.push_back( detail::typed_call<void(instance_type&)>() ); 		
+ 		injectors.push_back( detail::typed_call<void(instance_type&)>() );
  		auto& inj = injectors.back();
- 		inj.func = std::bind(std::forward<Callable>(func), 
+ 		inj.func = std::bind(std::forward<Callable>(func),
  			_1, inj.unwrap_inject(std::forward<Args>(args))... );
 	}
 
@@ -136,9 +136,9 @@ public:
 		@return a new instance of the resource
 		@throw instantiation_error if a provider is not set.
 	  */
-	inline instance_type provide() const { 
+	inline instance_type provide() const {
 		namespace u=utilities;
-		if(! prov.func) throw instantiation_error(u::str_builder() 
+		if(! prov.func) throw instantiation_error(u::str_builder()
 			<< "A provider is not set for resource " << rid());
 		return prov.func();
 	}
@@ -190,7 +190,7 @@ public:
 private:
 	detail::typed_call<instance_type()> prov;
 	detail::typed_call<void(instance_type&)> disp;
-	std::vector< detail::typed_call<void(instance_type&)> > injectors; 
+	std::vector< detail::typed_call<void(instance_type&)> > injectors;
 };
 
 
@@ -231,8 +231,8 @@ public:
 //====================================================
 
 template <typename Instance, typename Scope, typename...Tags>
-resource_manager< resource<Instance,Scope,Tags...> >* 
-resource<Instance,Scope,Tags...>::manager() const { 
+resource_manager< resource<Instance,Scope,Tags...> >*
+resource<Instance,Scope,Tags...>::manager() const {
 	//return providence().get(*this);
 	return resource_manager< resource<Instance,Scope,Tags...> >::get(*this);
 
@@ -241,7 +241,7 @@ resource<Instance,Scope,Tags...>::manager() const {
 
 template <typename Instance, typename Scope, typename ...Tags>
 template <typename Callable, typename...Args>
-const resource<Instance, Scope,Tags...> & 
+const resource<Instance, Scope,Tags...> &
 resource<Instance, Scope,Tags...>::provide(Callable func, Args&& ... args ) const
 {
  	resource_manager<resource_type>* rm = manager();
@@ -251,18 +251,18 @@ resource<Instance, Scope,Tags...>::provide(Callable func, Args&& ... args ) cons
 
 template <typename Instance, typename Scope, typename ...Tags>
 template <typename Callable, typename...Args>
-const resource<Instance, Scope,Tags...> & 
+const resource<Instance, Scope,Tags...> &
 resource<Instance, Scope,Tags...>::inject(Callable func, Args&& ... args ) const
 {
  	resource_manager<resource_type>* rm = manager();
  	rm->injector(std::forward<Callable>(func), std::forward<Args>(args)...);
- 	return (*this);	
+ 	return (*this);
 }
 
 
 template <typename Instance, typename Scope, typename ...Tags>
 template <typename Callable, typename...Args>
-const resource<Instance, Scope,Tags...> & 
+const resource<Instance, Scope,Tags...> &
 resource<Instance, Scope,Tags...>::dispose(Callable func, Args&& ... args ) const
 {
  	resource_manager<resource_type>* rm = manager();

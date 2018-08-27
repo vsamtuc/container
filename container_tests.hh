@@ -18,7 +18,7 @@ public:
 	}
 
 
-	void test_get_declared() 
+	void test_get_declared()
 	{
 		resource<int> r({});
 
@@ -27,8 +27,7 @@ public:
 		r.declare();
 		TS_ASSERT_EQUALS(providence().get_declared(r), r.manager());
 
-
+		TS_ASSERT_EQUALS(providence().resource_managers().size(),1);
 	}
 
 };
-

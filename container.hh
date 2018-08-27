@@ -42,7 +42,7 @@ public:
 		try {
 			return static_cast<resource_manager<Resource>*>(rms.at(r));
 		} catch(std::out_of_range) {
-			auto rm = new resource_manager<Resource>(r); 
+			auto rm = new resource_manager<Resource>(r);
 			bool succ [[maybe_unused]];
 			std::tie(std::ignore, succ) = rms.emplace(r, rm);
 			assert(succ); // since we just failed the lookup!
@@ -63,7 +63,7 @@ private:
 };
 
 
-inline container& providence() { 
+inline container& providence() {
 	static container c;
 	return c;
 }

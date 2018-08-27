@@ -10,7 +10,7 @@ namespace cdi {
 
 	The implementation is based on std:any.
   */
-class asset 
+class asset
 {
 public:
 	/**
@@ -26,7 +26,7 @@ public:
 		Get an object of the provided value stored inside the asset
 		@tparam Value the type of the value, which must be CopyConstructible
 		@return the stored value
-		@throw std::bad_any_cast 
+		@throw std::bad_any_cast
 	  */
 	template <typename Value>
 	Value get_object() const { return std::any_cast<Value>(obj); }
@@ -35,7 +35,7 @@ public:
 		Get an object of the provided value stored inside the asset
 		@tparam Value the type of the value, which must be CopyConstructible
 		@return the stored value
-		@throw std::bad_any_cast 
+		@throw std::bad_any_cast
 	  */
 	template <typename Value>
 	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
@@ -62,10 +62,10 @@ private:
 	resource instance, it first performs a lookup in the map. If not found, it
 	initiates a process of instantiation, and stores the result in the map
 	(also returning it).
-	
+
 	This class is meant to be used in the implementation of scopes.
   */
-class context 
+class context
 {
 public:
 
@@ -77,7 +77,7 @@ public:
 		@return the provided type for the resource
 		@throw instantiation_error if something went wrong
 
-		If a resource instance is not already in the context, 
+		If a resource instance is not already in the context,
 		this method calls create() to create one.
 	  */
 	template <typename Resource>
@@ -92,8 +92,8 @@ public:
 		} catch(std::bad_any_cast) {
 			throw instantiation_error(M() << "Cyclic instantiation for " << r.id());
 		} catch(...) {
-			std::throw_with_nested(instantiation_error(M() 
-				<< "Internal error during instantiation for " << r.id()));			
+			std::throw_with_nested(instantiation_error(M()
+				<< "Internal error during instantiation for " << r.id()));
 		}
 	}
 
@@ -139,8 +139,8 @@ public:
 				contextual_base* rm = providence().at(rid);
 				rm->dispose_any(ass.object());
 			} catch(std::out_of_range) {
-				throw disposal_error(u::str_builder() 
-					<<"Could not obtain resource manager for " << rid 
+				throw disposal_error(u::str_builder()
+					<<"Could not obtain resource manager for " << rid
 					<< " found in the context!");
 			}
 		}
@@ -164,12 +164,12 @@ public:
 
 	This scope is not associated with a context; every time
 	it is asked for an object, it accesses the resource manager
-	to provide a new value.	
+	to provide a new value.
 
 	It is not clear that this scope is useful in applications,
 	but it is quite useful in testing.
   */
-struct NewScope 
+struct NewScope
 {
 	/**
 		Create a resource instance in this scope.
@@ -189,15 +189,15 @@ struct NewScope
 
 
 /**
-	Implementation of scopes that are guarded by the existence of 
+	Implementation of scopes that are guarded by the existence of
 	at least one object instance.
 
 	@tparam Tag For each different type, a new scope class is defined.
 
 	The Tag type is only used to instantiate different scopes.
 
-	A scope defined by class instances of this template contains an internal 
-	context where objects are stored. 
+	A scope defined by class instances of this template contains an internal
+	context where objects are stored.
 
 	A scope defined by a (concrete) class GuardedScope<T> is activatable in a turnstile
 	fashion. Each instance of the type GuardScope<T> (on the stack, on the heap, as
@@ -217,9 +217,9 @@ struct GuardedScope
 	/**
 		Destructor, decreases the turnstile count.
 	  */
-	inline ~GuardedScope() { 
-		-- _n; 
-		if(_n==0) ctx.clear(); 
+	inline ~GuardedScope() {
+		-- _n;
+		if(_n==0) ctx.clear();
 	}
 
 	GuardedScope(const GuardedScope<Tag>&)=delete;
@@ -234,18 +234,15 @@ struct GuardedScope
 		@param r the resource
 		@return a resource instance from this scope
 		@throws inactive_scope_error if the scope is not active
-		@throws instantiation_error if contextual instantiation fails 
+		@throws instantiation_error if contextual instantiation fails
 	  */
 	template <typename Resource>
 	static inline typename Resource::instance_type get(const Resource& r) {
-		static_assert( std::is_same_v<typename Resource::scope, GuardedScope<Tag> >,
-		"The Resource scope does not match this scope" );
-
 		namespace u = utilities;
-		if(! is_active()) throw inactive_scope_error(u::str_builder() 
+		if(! is_active()) throw inactive_scope_error(u::str_builder()
 			<< "Trying to allocate " << r.id() << " while scope is inactive");
 		return ctx.get(r);
-	}	
+	}
 
 	/**
 		Returns true if the scope is active
@@ -254,13 +251,73 @@ struct GuardedScope
 
 	/**
 		Returns the current turnstile count.
-	  */	
+	  */
 	static inline size_t count() { return _n; }
 private:
 	static inline size_t _n=0;
 	static inline context ctx;
 };
 
+
+
+/**
+	Implementation of scopes which provide a stack of contexts.
+
+	@tparam Tag For each different type, a new scope class is defined.
+
+	The Tag type is only used to instantiate different scopes.
+
+	A scope defined by class instances of this template contains an internal
+	context where objects are stored.
+
+	A scope defined by a (concrete) class LocalScope<T> is active
+	when at least an instance of this class exists. However, instances
+	of LocalScope<T> expect (and throw an exception unless) that they
+	have nested lifetimes. This can be ensured by only creating them
+	as local variables on the stack, which is the indended use.
+
+	This class is neither copyable nor movable.
+  */
+template <typename Tag>
+class LocalScope
+{
+public:
+	LocalScope() {
+		saved_ctx = current_ctx;
+		current_ctx = &ctx;
+	}
+	~LocalScope()
+	{
+		assert(current_ctx == &ctx);
+		current_ctx = saved_ctx;
+	}
+
+	/**
+		Static method that returns a resource instance in this scope.
+		@tparam Resource the resource type
+		@param r the resource
+		@return a resource instance from this scope
+		@throws inactive_scope_error if the scope is not active
+		@throws instantiation_error if contextual instantiation fails
+	  */
+	template <typename Resource>
+	static inline typename Resource::instance_type get(const Resource& r) {
+		namespace u = utilities;
+		if(! is_active()) throw inactive_scope_error(u::str_builder()
+			<< "Trying to allocate " << r.id() << " while scope is inactive");
+		return current_ctx->get(r);
+	}
+
+	/**
+		Returns true if the scope is active
+	  */
+	static inline bool is_active() { return current_ctx!=nullptr; }
+
+private:
+	context ctx;
+	context* saved_ctx;
+	inline static context* current_ctx; // zero-initialized
+};
 
 
 /**
@@ -281,7 +338,7 @@ public:
 		@tparam Resource the resource type
 		@param r the resource
 		@return a resource instance from this scope
-		@throws instantiation_error if contextual instantiation fails 
+		@throws instantiation_error if contextual instantiation fails
 	  */
 	template <typename Resource>
 	static inline typename Resource::instance_type get(const Resource& r) {
@@ -315,7 +372,7 @@ inline void container::clear() {
 	GlobalScope::clear();
 
 	// Delete all resource managers
-	for(auto& [rid  ,rm] : rms) { 
+	for(auto& [rid  ,rm] : rms) {
 		(void) rid;//maybe unused?
 		delete rm;
 	}
@@ -324,4 +381,3 @@ inline void container::clear() {
 
 
 } // end namespace container
-

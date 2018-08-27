@@ -24,18 +24,18 @@ class InContainer : public CxxTest::TestSuite
 //=================================
 
 
-struct local_scope_tag;
-
-using LocalScope = GuardedScope<local_scope_tag>;
-
-template <typename Value, typename ...Tags>
-using Local = resource<Value, LocalScope , Tags...>;
 
 
 
 class ProviderSuite : public InContainer
 {
 public:
+
+
+	struct LocalScope : GuardedScope<LocalScope> {};
+
+	template <typename Value, typename ...Tags>
+	using Local = resource<Value, LocalScope , Tags...>;
 
 	static int foovoid() { return 100; }
 	static int fooint(int a) { return a+10; }
@@ -57,18 +57,18 @@ public:
 		provide(Rint, fooint, Rvoid );
 
 		// at this point, we have not created Rvoid !
-		TS_ASSERT_EQUALS(get(Rint), 110); 
+		TS_ASSERT_EQUALS(get(Rint), 110);
 
-		TS_ASSERT_EQUALS(get(Rval), 20); 
+		TS_ASSERT_EQUALS(get(Rval), 20);
 		TS_ASSERT_EQUALS(bind(&decltype(Rval)::get, Rval)(), 20 );
-		TS_ASSERT_EQUALS(get(Rvoid), 100); 
+		TS_ASSERT_EQUALS(get(Rvoid), 100);
 
 		TS_ASSERT_EQUALS(Rval.manager()->provide(), 20);
 		TS_ASSERT_EQUALS(Rvoid.manager()->provide(), 100);
 		TS_ASSERT_EQUALS(Rint.manager()->provide(), 110);
 	}
 
-	void test_provider_int2() 
+	void test_provider_int2()
 	{
 		test_provider_int();
 	}
@@ -170,8 +170,8 @@ public:
 	}
 
 
-	void test_syntax() 
-	{ 
+	void test_syntax()
+	{
 		A a;
 
 		inj(&a, &A::x, 4);
@@ -210,4 +210,3 @@ public:
 
 
 };
-

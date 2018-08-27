@@ -38,27 +38,27 @@ public:
 	};
 
 
-	void tearDown() override { 
+	void tearDown() override {
 		providence().clear();
 	}
 
-	void test_new_scope() 
+	void test_new_scope()
 	{
 		auto r1 = resource<Foo*,NewScope>({});
 		provide(r1, [](){ return new Foo(5); });
 		dispose(r1, [](auto p) { delete p; });
 
 		vector<Foo*> arr;
-		for(size_t i=0;i<10;i++) 
+		for(size_t i=0;i<10;i++)
 			arr.push_back(get(r1));
 
-		for(size_t i=0;i<10;i++) 
+		for(size_t i=0;i<10;i++)
 			for(size_t j=i+1;j<10;j++) {
 				TS_ASSERT_DIFFERS(arr[i],arr[j]);
 			}
 		TS_ASSERT_EQUALS(Foo::leaked, 10);
 
-		for(size_t i=0;i<10;i++) 
+		for(size_t i=0;i<10;i++)
 			delete arr[i];
 	}
 
@@ -131,5 +131,31 @@ public:
 		TS_ASSERT_EQUALS(b->other, a);
 	}
 
+
+	struct TempScope : LocalScope<TempScope> { };
+
+	void test_local_scope()
+	{
+		auto r = resource<int*, TempScope>({});
+		r	.provide([]() { return new int(10); })
+			.dispose([](auto self) { delete self; });
+
+		TS_ASSERT(! TempScope::is_active());
+
+		// outer instance
+		{
+			TempScope s1;
+
+			int* p1 = r.get();
+			// inner Instance
+			{
+				TempScope s2;
+
+				int* p2 = r.get();
+
+				TS_ASSERT_DIFFERS(p1, p2);
+			}
+		}
+	}
 
 };
