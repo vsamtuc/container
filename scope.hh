@@ -5,54 +5,6 @@
 
 namespace cdi {
 
-/**
-	Class that provides storage for objects inside context.
-
-	The implementation is based on std:any.
-  */
-class asset
-{
-public:
-	/**
-		Set the asset to a value.
-
-		@tparam Value the type of the value, which must be CopyConstructible
-		@param o the value to store
-	  */
-	template <typename Value>
-	asset(const Value& o) : obj(o) { }
-
-	/**
-		Get an object of the provided value stored inside the asset
-		@tparam Value the type of the value, which must be CopyConstructible
-		@return the stored value
-		@throw std::bad_any_cast
-	  */
-	template <typename Value>
-	Value get_object() const { return std::any_cast<Value>(obj); }
-
-	/**
-		Get an object of the provided value stored inside the asset
-		@tparam Value the type of the value, which must be CopyConstructible
-		@return the stored value
-		@throw std::bad_any_cast
-	  */
-	template <typename Value>
-	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
-
-	/**
-		Get a reference to the std::any object within the asset.
-	  */
-	std::any& object() { return obj; }
-
-	/**
-		Get a const reference to the std::any object within the asset.
-	  */
-	const std::any& object() const { return obj; }
-private:
-	std::any obj;
-};
-
 
 /**
 	A container that can materialize resources on demand, providing storage.
@@ -120,9 +72,9 @@ public:
 			resource_manager<Resource>* rm = providence().get_declared(r);
 			if(rm==nullptr)
 				throw instantiation_error(u::str_builder() << "In creating instance, undeclared resource " << r);
-			ass.object() = rm->provide();
-			rm->inject(ass.get_object_ref<instance_type>());
-			return ass.get_object<instance_type>();
+			rm->provide(ass.object());
+			rm->inject(ass.object());
+			return ass.get_object<instance_type>(); // type dependency!
 		} catch(...) {
 			asset_map.erase(iter);
 			std::throw_with_nested(instantiation_error(u::str_builder() << "In providing to " << r));
@@ -139,7 +91,7 @@ public:
 		for(auto& [rid, ass] : asset_map) {
 			try {
 				contextual_base* rm = providence().at(rid);
-				rm->dispose_any(ass.object());
+				rm->dispose(ass.object());
 			} catch(std::out_of_range) {
 				throw disposal_error(u::str_builder()
 					<<"Could not obtain resource manager for " << rid
@@ -194,7 +146,7 @@ struct NewScope
 	inline static typename Resource::instance_type get(const Resource& r) {
 		static_assert( std::is_same_v<typename Resource::scope, NewScope>,
 		"The Resource scope does not match this scope" );
-		return declare(r)->provide();
+		return declare(r)->provide_instance();
 	}
 };
 

@@ -63,9 +63,10 @@ public:
 		TS_ASSERT_EQUALS(bind(&decltype(Rval)::get, Rval)(), 20 );
 		TS_ASSERT_EQUALS(get(Rvoid), 100);
 
-		TS_ASSERT_EQUALS(Rval.manager()->provide(), 20);
-		TS_ASSERT_EQUALS(Rvoid.manager()->provide(), 100);
-		TS_ASSERT_EQUALS(Rint.manager()->provide(), 110);
+		TS_ASSERT_EQUALS(Rval.manager()->provide_instance(), 20);
+		TS_ASSERT_EQUALS(Rvoid.manager()->provide_instance(), 100);
+		TS_ASSERT_EQUALS(Rint.manager()->provide_instance(), 110);
+
 	}
 
 	void test_provider_int2()
@@ -141,72 +142,5 @@ public:
 		}
 		TS_ASSERT_EQUALS(Foo::leaked, 0);
 	}
-
-	struct A {
-		int x;
-		string y;
-		double z;
-		void set_z(double _z) { z=_z; }
-	};
-
-	template <typename T, typename V, typename U>
-	void inj(T* obj, V T::*attr, U val) {
-		obj->*attr = val;
-	}
-
-	template <typename T, typename V, typename U>
-	void inj(T& obj, V T::*attr, U val) {
-		obj.*attr = val;
-	}
-
-	template <typename T, typename V, typename U>
-	void inj(T* obj, void (T::*meth)(V) , U val) {
-		(obj->*meth)(val);
-	}
-
-	template <typename T, typename V, typename U>
-	void inj(T& obj, void (T::*meth)(V) , U val) {
-		(obj.*meth)(val);
-	}
-
-
-	void test_syntax()
-	{
-		A a;
-
-		inj(&a, &A::x, 4);
-		inj(a, &A::y, "hello");
-		inj(a, &A::set_z, 3.14);
-
-		TS_ASSERT_EQUALS(a.x, 4);
-		TS_ASSERT_EQUALS(a.y, "hello");
-		TS_ASSERT_EQUALS(a.z, 3.14);
-	}
-
-	#define PR(t) (u::str_builder() << #t << " -> " << u::demangle(typeid(t).name())).str()
-	#define P(V)  (u::str_builder() << #V << " -> " << V).str()
-
-	void xtest_type_traits()
-	{
-		cout << endl;
-		cout << PR(Foo*) << endl;
-		cout << PR(decay<Foo*>::type) << endl;
-		cout << PR(decay<const Foo*>::type) << endl;
-		cout << PR(decay<Foo const *>::type) << endl;
-		cout << PR(decay<Foo* const&>::type) << endl;
-
-		cout << P(is_pointer<Foo*>::value) << endl;
-		cout << P(is_pointer<Foo*&>::value) << endl;;
-		cout << P(is_object<Foo*>::value) << endl;
-
-		cout << PR(remove_reference<Foo*&&>::type) << endl;
-		cout << P(is_class<Foo*>::value) << endl;
-		cout << P(is_class<Foo&>::value) << endl;
-		cout << P(is_class<const Foo>::value) << endl;
-		cout << P(is_class<Foo*>::value) << endl;
-
-		cout << endl;
-	}
-
 
 };

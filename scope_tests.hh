@@ -81,7 +81,11 @@ public:
 
 		provide(A::rsrc, [](B*o){ return new A(o); }, rb);
 		provide(rb, [](A*o){ return new B(o); }, A::rsrc);
+
 		TS_ASSERT_EQUALS(providence().resource_managers().size(), 2);
+		u::str_builder report;
+		TS_ASSERT( ! providence().check_consistency(report) );
+		TS_ASSERT( report.str().find("Cyclical dependency")!=string::npos );
 
 		try {
 			auto x = A::rsrc.get()->other;
@@ -109,11 +113,14 @@ public:
 			.dispose([](auto self) { delete self; });
 
 		TS_ASSERT_EQUALS(providence().resource_managers().size(), 2);
+		TS_ASSERT( providence().check_consistency(cerr) );
+
 		TS_ASSERT_EQUALS(ra.get()->other, rb.get());
 	}
 
-	void test_global_cycle_with_injection()
+	void test_global_cycle_with_injection1()
 	{
+		// both are default-constructed
 		resource<A*>({})
 			.provide([](){ return new A(nullptr); })
 			.inject([](auto self, auto other){ self->other = other; }, resource<B*>({}))
@@ -127,10 +134,58 @@ public:
 		auto a = resource<A*>({}).get();
 		auto b = resource<B*>({}).get();
 
+		TS_ASSERT( providence().check_consistency(cerr) );
+
 		TS_ASSERT_EQUALS(a->other, b);
 		TS_ASSERT_EQUALS(b->other, a);
 	}
 
+
+	void test_global_cycle_with_injection2()
+	{
+		// A requires B, B is default-constucted
+		resource<A*>({})
+			.provide([](auto b){ return new A(b); }, resource<B*>({}))
+			.dispose([](auto self) { delete self; });
+
+		resource<B*>({})
+			.provide([](){ return new B(nullptr); })
+			.inject([](auto self, auto other){ self->other = other; }, resource<A*>({}))
+			.dispose([](auto self) { delete self; });
+
+		TS_ASSERT( providence().check_consistency(cerr) );
+
+		A* a;
+		try{
+			a = resource<A*>({}).get();
+		} catch(std::exception& e) {
+			output_exception(cerr, e);
+			throw;
+		}
+		auto b = resource<B*>({}).get();
+
+		TS_ASSERT_EQUALS(a->other, b);
+		TS_ASSERT_EQUALS(b->other, a);
+	}
+
+	void test_global_cycle_with_injection3()
+	{
+		// A is default constructed, B requires A
+		resource<A*>({})
+			.provide([](){ return new A(nullptr); })
+			.inject([](auto self, auto other){ self->other = other; }, resource<B*>({}))
+			.dispose([](auto self) { delete self; });
+
+		resource<B*>({})
+			.provide([](auto a){ return new B(a); }, resource<A*>({}))
+			.dispose([](auto self) { delete self; });
+
+		auto a = resource<A*>({}).get();
+		auto b = resource<B*>({}).get();
+
+		TS_ASSERT_EQUALS(a->other, b);
+		TS_ASSERT_EQUALS(b->other, a);
+	}
 
 	struct TempScope : LocalScope<TempScope> { };
 

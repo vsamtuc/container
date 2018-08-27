@@ -75,13 +75,23 @@ public:
 	/** Return the set of resources required for instantiation */
 	virtual const injection_list& provider_injections() const = 0;
 
-	/** Return the set of resources required for instantiation */
+	/** Return the set of resources required for disposal */
 	virtual const injection_list& disposer_injections() const = 0;
 
+	/** Return the number of injections */
+	virtual size_t number_of_injectors() const =0;
+
+	/** Return the set of resources required for an injection */
+	virtual const injection_list& injector_injections(size_t i) const=0;
+
 	/** Instantiates a resource instance polymorphically. */
-	virtual std::any provide_any() const = 0;
+	virtual void provide(std::any&) const = 0;
+
+	/** Injects a resource instance polymorphically. */
+	virtual void inject(std::any&) const = 0;
+
 	/** Disposes a resource instance polymorphically. */
-	virtual void dispose_any(std::any&) const = 0;
+	virtual void dispose(std::any&) const = 0;
 
 private:
 	resourceid _rid;
@@ -120,6 +130,7 @@ public:
  			_1, disp.unwrap_inject(std::forward<Args>(args))... );
 	}
 
+	/** Add a new injector for this contextual */
 	template <typename Callable, typename...Args>
 	void injector(Callable&& func, Args&& ... args )
 	{
@@ -131,12 +142,23 @@ public:
 	}
 
 	/**
-		Return a new instance from the provider.
+		Create a new instance from the provider.
 
-		@return a new instance of the resource
+		@param obj a holder for the new instance of the resource
 		@throw instantiation_error if a provider is not set.
 	  */
-	inline instance_type provide() const {
+	inline void provide(std::any& obj) const override {
+		obj = provide_instance();
+	}
+
+
+	/**
+		Return a new instance from the provider.
+
+		@param obj the destination for the new instance of the resource
+		@throw instantiation_error if a provider is not set.
+	  */
+	inline instance_type provide_instance() const {
 		namespace u=utilities;
 		if(! prov.func) throw instantiation_error(u::str_builder()
 			<< "A provider is not set for resource " << rid());
@@ -144,29 +166,28 @@ public:
 	}
 
 	/**
-		Return a new instance from the provider polymorphically.
-
-		@return a new instance of the resource
-		@throw instantiation_error if a provider is not set.
-	  */
-	inline std::any provide_any() const override {
-		return std::any(provide());
-	}
-
-	/**
 		Inject an object.
-		@param obj reference to the object to be disposed
+		@param obj reference to the object to be injected
 	  */
-	inline void inject(instance_type& obj) const {
+	inline void inject_instance(instance_type& obj) const {
 		for(auto& inj : injectors)
 			inj.func(obj);
 	}
 
 	/**
+		Inject an object polymorhically.
+		@param obj reference to the object to be injected
+	  */
+	inline void inject(std::any& obj) const override {
+		inject_instance(std::any_cast<instance_type&>(obj));
+	}
+
+
+	/**
 		Dispose of an object.
 		@param obj reference to the object to be disposed
 	  */
-	inline void dispose(instance_type& obj) const {
+	inline void dispose_instance(instance_type& obj) const {
 		if(! disp.func) return; // letting the disposer be null is not an error
 		disp.func(obj);
 	}
@@ -175,8 +196,8 @@ public:
 		Dispose of an object polymorphically.
 		@param obj reference to the object to be disposed
 	  */
-	virtual void dispose_any(std::any& obj) const override {
-		dispose(std::any_cast<instance_type&>(obj));
+	virtual void dispose(std::any& obj) const override {
+		dispose_instance(std::any_cast<instance_type&>(obj));
 	}
 
 	virtual const injection_list& provider_injections() const override {
@@ -185,6 +206,13 @@ public:
 
 	virtual const injection_list& disposer_injections() const override {
 		return disp.injected;
+	}
+
+	virtual size_t number_of_injectors() const override {
+		return injectors.size();
+	}
+	virtual const injection_list& injector_injections(size_t i) const override {
+		return injectors.at(i).injected;
 	}
 
 private:
@@ -218,10 +246,6 @@ public:
 	static inline resource_manager<Resource>* get(const Resource& r);
 
 };
-
-
-//class provision_map;
-//inline provision_map& providence();
 
 
 //====================================================
