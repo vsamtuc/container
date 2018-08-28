@@ -61,11 +61,24 @@ std::ostream& operator<<(std::ostream&, const resourceid&);
 template <typename Instance, typename Scope=GlobalScope , typename ... Tags>
 struct resource
 {
+	static_assert( std::is_same_v<Instance, std::decay_t<Instance>>,
+	"Resource instance types must not be references and/or cv-qualified.\n"
+	"Please use std::decay<...> to pass the base type"
+	);
+
 	/// the resource type
 	typedef resource<Instance, Scope, Tags...> resource_type;
 
 	/// The type of the contextual object type
 	typedef Instance instance_type;
+
+	/// The type of return for getting a value of an instance
+	typedef std::conditional_t<
+		std::is_scalar_v<Instance>,
+			Instance,
+			std::add_lvalue_reference_t< std::add_const_t<Instance> >
+			>
+		return_type;
 
 	/// The scope of the contextual object type
 	typedef Scope scope;
@@ -108,7 +121,7 @@ struct resource
 		This function returns a resource instance of type `instance_type` for the
 		given resource based on the current context.
  	  */
- 	instance_type get() const;
+ 	return_type get() const;
 
  	/// Declare a resource as having a resource manager
  	inline const resource_type& declare() const { manager(); return (*this); }

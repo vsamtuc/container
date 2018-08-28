@@ -167,10 +167,22 @@ private:
 	}
 
 public:
-	template <typename Resource>
-	inline typename Resource::instance_type get(const Resource& r, Phase p) {
 
-		typedef typename Resource::instance_type instance_type;
+	/**
+		Get an instance with given phase.
+
+		@param r the resource to return
+		@param p the minimum phase of the resource
+		@return the resource instance
+
+		This function returns a resource instance for the given
+		resource `r`, not necessarily completely created. This call
+		is not intended for end-users; it is the main call responsible
+		for instantiating resources, and at the heart of the container's
+		operation.
+	  */
+	template <typename Resource>
+	inline typename Resource::return_type get(const Resource& r, Phase p) {
 		typedef typename Resource::scope scope;
 
 		// Check phase request
@@ -219,12 +231,16 @@ public:
 			}
 		}
 
+		// ok, at this point we have a provided asset, execute
+		// deferred steps to bring the assets to completion
 		while(ass->phase()<p) {
 			if(do_deferred()==0)
+				// there were no deferred steps executed,
+				// there must be a cycle...
 				throw instantiation_error(u::str_builder()
 					<< "Cyclical dependency in instantiating " << r);
 		}
-		return ass->asset::get<instance_type>();
+		return ass->asset::get<typename Resource::return_type>();
 
 	}
 
@@ -409,7 +425,7 @@ namespace detail {
 
 template <typename Arg, typename Scope, typename ... Tags>
 auto inject_partial(const resource<Arg,Scope,Tags...>& r, Phase ph)
- -> typename resource<Arg,Scope,Tags...>::instance_type
+ -> typename resource<Arg,Scope,Tags...>::return_type
  {
 	 return providence().get(r, ph);
  }
@@ -417,7 +433,7 @@ auto inject_partial(const resource<Arg,Scope,Tags...>& r, Phase ph)
 }
 
 template <typename Instance, typename Scope, typename...Tags>
-typename resource<Instance,Scope,Tags...>::instance_type
+typename resource<Instance,Scope,Tags...>::return_type
 resource<Instance,Scope,Tags...>::get() const
 {
 	return providence().get(*this, Phase::created);

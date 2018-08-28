@@ -103,7 +103,7 @@ namespace detail {
 	// this call is implemented later by the container
 	template <typename Arg, typename Scope, typename ... Tags>
 	auto inject_partial(const resource<Arg,Scope,Tags...>&, Phase)
-	 -> typename resource<Arg,Scope,Tags...>::instance_type;
+	 -> typename resource<Arg,Scope,Tags...>::return_type;
 
 	// A call is a base class for dependencies of lifecycle calls
 	struct call {
@@ -160,6 +160,9 @@ public:
 
 	/** Return the set of resources required for disposal */
 	virtual const injection_list& disposer_injections() const = 0;
+
+	/** Return true if the resource has an initializer */
+	virtual bool has_provider() const =0;
 
 	/** Return true if the resource has an initializer */
 	virtual bool has_initializer() const =0;
@@ -322,6 +325,10 @@ public:
 	//================================
 	// introspection for optimization
 	//================================
+
+	virtual bool has_provider() const override {
+		return bool( prov.func );
+	}
 
 	virtual bool has_initializer() const override {
 		return bool( init.func );
