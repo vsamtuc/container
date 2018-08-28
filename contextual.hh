@@ -13,12 +13,26 @@
 
 namespace cdi {
 
+/**
+	These labels denote the lifecycle of a resource instance.
+  */
+enum class Phase {
+	allocated, //< storage has been obtained (uninitialized)
+	provided,  //< storage contains a provided value
+	injected,  //< injections have been performed
+	created,   //< initialize() has been called
+	disposed   //< the instance has been disposed
+};
 
 
 /**
 	Class that provides storage for instances inside contexts.
 
-	The implementation is based on std:any.
+	An asset combines storage for an instance with metadata needed
+	by the container. The storage implementation is based on std:any.
+	The metadata consists of the phase of this instnance.
+
+	@see Phase
   */
 class asset
 {
@@ -32,8 +46,10 @@ public:
 	template <typename Value>
 	asset(const Value& o) : obj(o), ph(Phase::allocated) { }
 
+	/** Return the phase for this asset */
 	inline Phase phase() const { return ph; }
 
+	/** Set the phase for this asset */
 	inline void set_phase(Phase p) { ph=p; }
 
 	/**
@@ -43,7 +59,7 @@ public:
 		@throw std::bad_any_cast
 	  */
 	template <typename Value>
-	Value get_object() const { return std::any_cast<Value>(obj); }
+	Value get() const { return std::any_cast<Value>(obj); }
 
 	/**
 		Get an object of the provided value stored inside the asset
@@ -52,7 +68,7 @@ public:
 		@throw std::bad_any_cast
 	  */
 	template <typename Value>
-	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
+	Value& get_ref() { return std::any_cast<Value&>(obj); }
 
 	/**
 		Get a reference to the std::any object within the asset.
@@ -84,6 +100,11 @@ namespace detail {
 	// Implementation-related
 	//
 
+	// this call is implemented later by the container
+	template <typename Arg, typename Scope, typename ... Tags>
+	auto inject_partial(const resource<Arg,Scope,Tags...>&, Phase)
+	 -> typename resource<Arg,Scope,Tags...>::instance_type;
+
 	// A call is a base class for dependencies of lifecycle calls
 	struct call {
 		template <typename Arg>
@@ -96,8 +117,9 @@ namespace detail {
 			const resource<Arg, Scope, Tags...> & res)
 		{
 			injected.push_back(res.manager());
-			return std::bind(std::mem_fn(&resource<Arg, Scope, Tags...>::get),
-							res, ph);
+			// return std::bind(std::mem_fn(&resource<Arg, Scope, Tags...>::get),
+			// 				res, ph);
+			return std::bind(inject_partial<Arg,Scope,Tags...>, res, ph);
 		}
 		injection_list injected;
 	};
@@ -133,8 +155,17 @@ public:
 	/** Return the set of resources required for instantiation */
 	virtual const injection_list& provider_injections() const = 0;
 
+	/** Return the set of resources required for initialization */
+	virtual const injection_list& init_injections() const = 0;
+
 	/** Return the set of resources required for disposal */
 	virtual const injection_list& disposer_injections() const = 0;
+
+	/** Return true if the resource has an initializer */
+	virtual bool has_initializer() const =0;
+
+	/** Return true if the resource has a disposer */
+	virtual bool has_disposer() const =0;
 
 	/** Return the number of injections */
 	virtual size_t number_of_injectors() const =0;
@@ -147,6 +178,9 @@ public:
 
 	/** Injects a resource instance polymorphically. */
 	virtual void inject(std::any&) const = 0;
+
+	/** Initializes the resource instance polymorphically. */
+	virtual void initialize(std::any&) const = 0;
 
 	/** Disposes a resource instance polymorphically. */
 	virtual void dispose(std::any&) const = 0;
@@ -176,6 +210,16 @@ public:
 		prov.injected.clear();
  		prov.func = std::bind(std::forward<Callable>(func),
  			prov.unwrap_inject(Phase::provided, std::forward<Args>(args))... );
+	}
+
+	/** Set the disposer for this contextual */
+	template <typename Callable, typename...Args>
+	void initializer(Callable&& func, Args&& ... args )
+	{
+ 		using namespace std::placeholders;
+ 		init.injected.clear();
+ 		init.func = std::bind(std::forward<Callable>(func),
+ 			_1, disp.unwrap_inject(Phase::injected, std::forward<Args>(args))... );
 	}
 
 	/** Set the disposer for this contextual */
@@ -217,8 +261,9 @@ public:
 	  */
 	inline instance_type provide_instance() const {
 		namespace u=utilities;
-		if(! prov.func) throw instantiation_error(u::str_builder()
-			<< "A provider is not set for resource " << rid());
+		if(! prov.func)
+			throw instantiation_error(u::str_builder()
+				<< "A provider is not set for resource " << rid());
 		return prov.func();
 	}
 
@@ -241,6 +286,23 @@ public:
 
 
 	/**
+		Initialize an object.
+		@param obj reference to the object to be disposed
+	  */
+	inline void initialize_instance(instance_type& obj) const {
+		if(! init.func) return; // letting the disposer be null is not an error
+		init.func(obj);
+	}
+
+	/**
+		Initialize an object polymorphically.
+		@param obj reference to the object to be disposed
+	  */
+	virtual void initialize(std::any& obj) const override {
+		initialize_instance(std::any_cast<instance_type&>(obj));
+	}
+
+	/**
 		Dispose of an object.
 		@param obj reference to the object to be disposed
 	  */
@@ -257,8 +319,24 @@ public:
 		dispose_instance(std::any_cast<instance_type&>(obj));
 	}
 
+	//================================
+	// introspection for optimization
+	//================================
+
+	virtual bool has_initializer() const override {
+		return bool( init.func );
+	}
+
+	virtual bool has_disposer() const override {
+		return bool( disp.func );
+	}
+
 	virtual const injection_list& provider_injections() const override {
 		return prov.injected;
+	}
+
+	virtual const injection_list& init_injections() const override {
+		return init.injected;
 	}
 
 	virtual const injection_list& disposer_injections() const override {
@@ -274,8 +352,9 @@ public:
 
 private:
 	detail::typed_call<instance_type()> prov;
-	detail::typed_call<void(instance_type&)> disp;
 	std::vector< detail::typed_call<void(instance_type&)> > injectors;
+	detail::typed_call<void(instance_type&)> init;
+	detail::typed_call<void(instance_type&)> disp;
 };
 
 
@@ -340,6 +419,15 @@ resource<Instance, Scope,Tags...>::inject(Callable func, Args&& ... args ) const
  	return (*this);
 }
 
+template <typename Instance, typename Scope, typename ...Tags>
+template <typename Callable, typename...Args>
+const resource<Instance, Scope,Tags...> &
+resource<Instance, Scope,Tags...>::initialize(Callable func, Args&& ... args ) const
+{
+ 	resource_manager<resource_type>* rm = manager();
+ 	rm->initializer(std::forward<Callable>(func), std::forward<Args>(args)...);
+ 	return (*this);
+}
 
 template <typename Instance, typename Scope, typename ...Tags>
 template <typename Callable, typename...Args>

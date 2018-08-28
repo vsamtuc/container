@@ -102,6 +102,7 @@ private:
 		deferred_work(asset* a, contextual_base* r) : ass(a), rm(r) {}
 
 		void inject() {
+			assert(ass->phase()>=Phase::provided && ass->phase()<=Phase::created);
 			if(ass->phase()==Phase::provided) {
 				rm->inject(ass->object());
 				ass->set_phase(Phase::injected);
@@ -109,8 +110,9 @@ private:
 		}
 		void create()
 		{
+			assert(ass->phase()>=Phase::injected && ass->phase()<=Phase::created);
 			if(ass->phase()==Phase::injected) {
-				// wait to implement postConstruct
+				rm->initialize(ass->object());
 				ass->set_phase(Phase::created);
 			}
 		}
@@ -128,9 +130,12 @@ private:
 			}
 		}
 		if(work.ass->phase()==Phase::injected) {
-			// for now do nothing smart!
-			deferred_creation.push(work);
-			return;
+			if(work.rm->has_initializer()) {
+				deferred_creation.push(work);
+				return;
+			} else {
+				work.ass->set_phase(Phase::created);
+			}
 		}
 		assert(work.ass->phase()==Phase::created);
 	}
@@ -219,7 +224,7 @@ public:
 				throw instantiation_error(u::str_builder()
 					<< "Cyclical dependency in instantiating " << r);
 		}
-		return ass->asset::get_object<instance_type>();
+		return ass->asset::get<instance_type>();
 
 	}
 
@@ -297,16 +302,18 @@ private:
 			// add inter-resouce dependencies
 			for(auto& rid1 : rm->provider_injections())
 				P->requires(G.get(Phase::provided, rid1->rid()));
+			for(size_t i=0; i < rm->number_of_injectors(); ++i) {
+				for(auto& rid1 : rm->injector_injections(i))
+					I->requires(G.get(Phase::provided, rid1->rid()));
+			}
+			for(auto& rid1 : rm->init_injections())
+				C->requires(G.get(Phase::injected, rid1->rid()));
 			for(auto& rid1 : rm->disposer_injections()) {
 				D->requires(G.get(Phase::created, rid1->rid()));
 				rsevent* u = G.get(Phase::disposed, rid1->rid());
 				// this is a "happens before" constraint which is
 				// actually a post-requirement of D
 				u->requires(D);
-			}
-			for(size_t i=0; i < rm->number_of_injectors(); ++i) {
-				for(auto& rid1 : rm->injector_injections(i))
-					I->requires(G.get(Phase::provided, rid1->rid()));
 			}
 		}
 	}
@@ -397,11 +404,22 @@ inline container& providence() {
 	return c;
 }
 
+namespace detail {
+
+template <typename Arg, typename Scope, typename ... Tags>
+auto inject_partial(const resource<Arg,Scope,Tags...>& r, Phase ph)
+ -> typename resource<Arg,Scope,Tags...>::instance_type
+ {
+	 return providence().get(r, ph);
+ }
+
+}
+
 template <typename Instance, typename Scope, typename...Tags>
 typename resource<Instance,Scope,Tags...>::instance_type
-resource<Instance,Scope,Tags...>::get(Phase ph) const
+resource<Instance,Scope,Tags...>::get() const
 {
-	return providence().get(*this, ph);
+	return providence().get(*this, Phase::created);
 }
 
 

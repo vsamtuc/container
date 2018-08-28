@@ -5,16 +5,6 @@
 namespace cdi {
 
 
-	/**
-		These labels denote the lifecycle of a resource instance.
-	  */
-	enum class Phase {
-		allocated, //< storage has been obtained (uninitialized)
-		provided,  //< storage contains a value
-		injected,  //< injections have been performed
-		created,   //< postConstruction (unimplemented!)
-		disposed   //< the instance has been disposed
-	};
 
 /**
 	Empty template used to hold a sequence of tag types.
@@ -118,7 +108,7 @@ struct resource
 		This function returns a resource instance of type `instance_type` for the
 		given resource based on the current context.
  	  */
- 	instance_type get(Phase ph = Phase::created) const;
+ 	instance_type get() const;
 
  	/// Declare a resource as having a resource manager
  	inline const resource_type& declare() const { manager(); return (*this); }
@@ -170,6 +160,10 @@ struct resource
 	 */
 	template <typename Callable, typename...Args>
 	const resource_type& inject(Callable func, Args&& ... args ) const;
+
+
+	template <typename Callable, typename...Args>
+	const resource_type& initialize(Callable func, Args&& ... args ) const;
 
 	/**
 		Register a new disposer for a resource.
@@ -386,6 +380,12 @@ template <typename Resource, typename Callable,	typename ... Args>
 inline auto provide(const Resource& r, Callable&& func, Args&& ... args  )
 {
 	return r.provide(std::forward<Callable>(func), std::forward<Args>(args)...);
+}
+
+template <typename Resource, typename Callable, typename...Args>
+inline auto initialize(const Resource& r, Callable&& func, Args&& ... args )
+{
+	return r.initialize(std::forward<Callable>(func), std::forward<Args>(args)...);
 }
 
 

@@ -99,6 +99,30 @@ public:
 		TS_FAIL("A cyclical dependency was not caught");
 	}
 
+	void test_init()
+	{
+		struct Info {
+			int a;
+			double b;
+			string c;
+		};
+
+		auto r = Global<Info*>({});
+
+		string get_c;
+
+		provide(r, [](){ return new Info; })
+		.inject([](auto self) { self->a = 1; })
+		.inject([](auto self) { self->b = 2; })
+		.inject([](auto self) { self->c = "Hello"; })
+		.initialize([&](auto self) { get_c = self->c; })
+		.dispose([](auto self) { delete self; });
+
+		TS_ASSERT_EQUALS(get_c, string());
+		r.get();
+
+		TS_ASSERT_EQUALS(get_c, "Hello");
+	}
 
 	void test_basic_injection()
 	{
