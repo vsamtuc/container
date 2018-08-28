@@ -60,7 +60,6 @@ public:
 		TS_ASSERT_EQUALS(get(Rint), 110);
 
 		TS_ASSERT_EQUALS(get(Rval), 20);
-		TS_ASSERT_EQUALS(bind(&decltype(Rval)::get, Rval)(), 20 );
 		TS_ASSERT_EQUALS(get(Rvoid), 100);
 
 		TS_ASSERT_EQUALS(Rval.manager()->provide_instance(), 20);
@@ -141,6 +140,14 @@ public:
 			TS_ASSERT_EQUALS(a->x, 4);
 		}
 		TS_ASSERT_EQUALS(Foo::leaked, 0);
+	}
+
+	void test_phase()
+	{
+		TS_ASSERT(Phase::allocated < Phase::provided);
+		TS_ASSERT(Phase::injected > Phase::provided);
+		TS_ASSERT(Phase::injected < Phase::created);
+		TS_ASSERT(Phase::disposed > Phase::created);
 	}
 
 };

@@ -13,6 +13,62 @@
 
 namespace cdi {
 
+
+
+/**
+	Class that provides storage for instances inside contexts.
+
+	The implementation is based on std:any.
+  */
+class asset
+{
+public:
+	/**
+		Set the asset to a value.
+
+		@tparam Value the type of the value, which must be CopyConstructible
+		@param o the value to store
+	  */
+	template <typename Value>
+	asset(const Value& o) : obj(o), ph(Phase::allocated) { }
+
+	inline Phase phase() const { return ph; }
+
+	inline void set_phase(Phase p) { ph=p; }
+
+	/**
+		Get an object of the provided value stored inside the asset
+		@tparam Value the type of the value, which must be CopyConstructible
+		@return the stored value
+		@throw std::bad_any_cast
+	  */
+	template <typename Value>
+	Value get_object() const { return std::any_cast<Value>(obj); }
+
+	/**
+		Get an object of the provided value stored inside the asset
+		@tparam Value the type of the value, which must be CopyConstructible
+		@return the stored value
+		@throw std::bad_any_cast
+	  */
+	template <typename Value>
+	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
+
+	/**
+		Get a reference to the std::any object within the asset.
+	  */
+	std::any& object() { return obj; }
+
+	/**
+		Get a const reference to the std::any object within the asset.
+	  */
+	const std::any& object() const { return obj; }
+private:
+	std::any obj;
+	Phase ph;
+};
+
+
 // forward
 class contextual_base;
 
@@ -31,15 +87,17 @@ namespace detail {
 	// A call is a base class for dependencies of lifecycle calls
 	struct call {
 		template <typename Arg>
-		constexpr Arg unwrap_inject(Arg arg) {
+		constexpr Arg unwrap_inject(Phase, Arg arg) {
 			return arg;
 		}
 
 		template <typename Arg, typename Scope, typename...Tags>
-		inline auto unwrap_inject(const resource<Arg, Scope, Tags...> & res)
+		inline auto unwrap_inject(Phase ph,
+			const resource<Arg, Scope, Tags...> & res)
 		{
 			injected.push_back(res.manager());
-			return std::bind(std::mem_fn(&resource<Arg, Scope, Tags...>::get), res);
+			return std::bind(std::mem_fn(&resource<Arg, Scope, Tags...>::get),
+							res, ph);
 		}
 		injection_list injected;
 	};
@@ -117,7 +175,7 @@ public:
 	{
 		prov.injected.clear();
  		prov.func = std::bind(std::forward<Callable>(func),
- 			prov.unwrap_inject(std::forward<Args>(args))... );
+ 			prov.unwrap_inject(Phase::provided, std::forward<Args>(args))... );
 	}
 
 	/** Set the disposer for this contextual */
@@ -127,7 +185,7 @@ public:
  		using namespace std::placeholders;
  		disp.injected.clear();
  		disp.func = std::bind(std::forward<Callable>(func),
- 			_1, disp.unwrap_inject(std::forward<Args>(args))... );
+ 			_1, disp.unwrap_inject(Phase::created, std::forward<Args>(args))... );
 	}
 
 	/** Add a new injector for this contextual */
@@ -138,7 +196,7 @@ public:
  		injectors.push_back( detail::typed_call<void(instance_type&)>() );
  		auto& inj = injectors.back();
  		inj.func = std::bind(std::forward<Callable>(func),
- 			_1, inj.unwrap_inject(std::forward<Args>(args))... );
+ 			_1, inj.unwrap_inject(Phase::provided, std::forward<Args>(args))... );
 	}
 
 	/**
@@ -150,7 +208,6 @@ public:
 	inline void provide(std::any& obj) const override {
 		obj = provide_instance();
 	}
-
 
 	/**
 		Return a new instance from the provider.

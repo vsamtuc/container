@@ -93,10 +93,10 @@ public:
 		} catch(const cdi::exception& e) {
 			u::str_builder s;
 			output_exception(s,e);
-			TS_ASSERT( s.str().find("Cyclic instantiation")!=string::npos );
+			TS_ASSERT( s.str().find("Cyclical dependency")!=string::npos );
 			return;
 		}
-		TS_FAIL("A cyclic dependency was not caught");
+		TS_FAIL("A cyclical dependency was not caught");
 	}
 
 

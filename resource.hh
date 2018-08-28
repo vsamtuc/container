@@ -4,6 +4,18 @@
 
 namespace cdi {
 
+
+	/**
+		These labels denote the lifecycle of a resource instance.
+	  */
+	enum class Phase {
+		allocated, //< storage has been obtained (uninitialized)
+		provided,  //< storage contains a value
+		injected,  //< injections have been performed
+		created,   //< postConstruction (unimplemented!)
+		disposed   //< the instance has been disposed
+	};
+
 /**
 	Empty template used to hold a sequence of tag types.
 	@tparam Tags the sequence of tag types.
@@ -16,7 +28,7 @@ template <typename ... Tags> struct tag_sequence  { };
 
 template <typename Resource>
 class resource_manager; 	// the basic class resouce operations
-class GlobalScope; 			// the default scope 
+class GlobalScope; 			// the default scope
 class resourceid;  			// type-erased resource id
 
 std::ostream& operator<<(std::ostream&, const resourceid&);
@@ -71,10 +83,10 @@ struct resource
 	/// The tags of the contextual object type
 	typedef tag_sequence<Tags...> tags;
 
-	/// Construct an instance 
+	/// Construct an instance
 	inline resource(const qualifiers& _q) : q(_q) { }
 
-	/// Construct an instance 
+	/// Construct an instance
 	inline resource(qualifiers&& _q) : q(_q) { }
 
  	/// The qualifiers of the contextual object type
@@ -82,7 +94,7 @@ struct resource
 
  	//===================================================
  	// The following methods are all defined externally
- 	// and constitute the main user entries to the 
+ 	// and constitute the main user entries to the
  	// container API.
  	//=================================================
 
@@ -103,10 +115,10 @@ struct resource
 		        context.
 		@throws instantiation_error if it failed to instantitate the resource
 
-		This function returns a resource instance of type `instance_type` for the 
+		This function returns a resource instance of type `instance_type` for the
 		given resource based on the current context.
  	  */
- 	instance_type get() const { return scope::get(*this); }
+ 	instance_type get(Phase ph = Phase::created) const;
 
  	/// Declare a resource as having a resource manager
  	inline const resource_type& declare() const { manager(); return (*this); }
@@ -124,17 +136,17 @@ struct resource
 		@param args a sequence of arguments to be given to func at invocation
 		@throws config_error if a disposer already exists for this resource
 
-		This call registers a new inject function for this resource. When an 
+		This call registers a new inject function for this resource. When an
 		instance is created, first the provider is invoked, followed by every
-		injector (of which there can be several), in the order of their declaration. 
+		injector (of which there can be several), in the order of their declaration.
 
-		When the created injector is invoked, the `func` is called with a non-const 
-		reference to `obj` as the first argument, followed by the same number of 
-		parameters as passed to `args`. The actual parameters following obj call 
+		When the created injector is invoked, the `func` is called with a non-const
+		reference to `obj` as the first argument, followed by the same number of
+		parameters as passed to `args`. The actual parameters following obj call
 		are computed as for provide(). the function's return value is ignored.
 
-		The usual function of an injector is to provide to the constructed instance 
-		some value obtained by another resource. Injectors are very important in 
+		The usual function of an injector is to provide to the constructed instance
+		some value obtained by another resource. Injectors are very important in
 		breaking dependency cycles between resources, because the container can
 		schedule their execution in the right order, when instantiating mutually
 		dependent resources.
@@ -150,7 +162,7 @@ struct resource
 		In this case the dependency of `R` on `Injected` is hidden from the container.
 		A much better approach is to replace the last line with
 		```
-		R.provide(...).inject([](auto x, auto y){ x->field = y; }, Injected);		
+		R.provide(...).inject([](auto x, auto y){ x->field = y; }, Injected);
 		```
 
 		@see provide()
@@ -169,9 +181,9 @@ struct resource
 		@throws config_error if a disposer already exists for this resource
 
 		This call registers a dispose function for this resource. When method
-		dispose(obj) is invoked on an instance `obj` of this resource, 
-		`func` is called with a non-const reference to `obj` as the first argument, 
-		followed by the same number of parameters as passed to `args`. 
+		dispose(obj) is invoked on an instance `obj` of this resource,
+		`func` is called with a non-const reference to `obj` as the first argument,
+		followed by the same number of parameters as passed to `args`.
 		The actual parameters following obj call are computed as for provide()
 
 		@see provide()
@@ -192,7 +204,7 @@ private:
 	Implementation of a resource id.
 
 	A resourceid is an untyped descriptor for resources. It can be
-	thought of as a pair of a type (described by a std::type_index) and a 
+	thought of as a pair of a type (described by a std::type_index) and a
 	set of qualifiers.
 
 	@section perf Performance
@@ -219,7 +231,7 @@ public:
 	  */
 	template <typename Instance, typename Scope, typename ...Tags>
 	resourceid(const resource<Instance,Scope,Tags...>& r)
-	: resourceid(typeid(resource<Instance,Scope,Tags...>), r.quals()) 
+	: resourceid(typeid(resource<Instance,Scope,Tags...>), r.quals())
 	{ }
 
 	/// Equality comparison
@@ -230,7 +242,7 @@ public:
 			sptr->type == other.sptr->type &&
 			sptr->quals == other.sptr->quals)
 		{
-			if(sptr.use_count() > other.sptr.use_count()) 
+			if(sptr.use_count() > other.sptr.use_count())
 				sptr = other.sptr;
 			else
 				other.sptr = sptr;
@@ -242,7 +254,7 @@ public:
 	/// Inequality
 	inline bool operator!=(const resourceid& other) const {  return !operator==(other); }
 
-	/// hash code 
+	/// hash code
 	inline size_t hash_code() const { return sptr->hcode; }
 
 	/// the type id of the resource
@@ -259,7 +271,7 @@ private:
 		const qualifiers quals;
 		const size_t hcode;
 
-		inline rid_impl(std::type_index ti, const qualifiers& q) 
+		inline rid_impl(std::type_index ti, const qualifiers& q)
 		: type(ti), quals(q), hcode(compute_hash(ti, q)) { }
 
 		static size_t compute_hash(std::type_index ti, const qualifiers& q)
@@ -288,8 +300,8 @@ inline std::ostream& operator<<(std::ostream& s, const resourceid& r)
 }
 
 template <typename V, typename S, typename ... T>
-resourceid resource<V,S,T...>::id() const { 
-	return resourceid(*this); 
+resourceid resource<V,S,T...>::id() const {
+	return resourceid(*this);
 }
 
 
@@ -389,7 +401,7 @@ inline auto provide(const Resource& r, Callable&& func, Args&& ... args  )
 	@throws config_error if a disposer already exists for this resource
 
 	This is a wrapper function for r.dispose(...).
-	
+
 	@see resource::dispose()
 	@see provide()
  */
@@ -402,4 +414,3 @@ inline auto dispose(const Resource& r, Callable&& func, Args&& ... args )
 
 
 } // end namespace container
-

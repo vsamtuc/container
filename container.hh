@@ -1,5 +1,6 @@
 #pragma once
 
+#include <stack>
 #include "contextual.hh"
 
 //=================================
@@ -11,54 +12,6 @@
 
 namespace cdi {
 
-
-/**
-	Class that provides storage for instances inside contexts.
-
-	The implementation is based on std:any.
-  */
-class asset
-{
-public:
-	/**
-		Set the asset to a value.
-
-		@tparam Value the type of the value, which must be CopyConstructible
-		@param o the value to store
-	  */
-	template <typename Value>
-	asset(const Value& o) : obj(o) { }
-
-	/**
-		Get an object of the provided value stored inside the asset
-		@tparam Value the type of the value, which must be CopyConstructible
-		@return the stored value
-		@throw std::bad_any_cast
-	  */
-	template <typename Value>
-	Value get_object() const { return std::any_cast<Value>(obj); }
-
-	/**
-		Get an object of the provided value stored inside the asset
-		@tparam Value the type of the value, which must be CopyConstructible
-		@return the stored value
-		@throw std::bad_any_cast
-	  */
-	template <typename Value>
-	Value& get_object_ref() { return std::any_cast<Value&>(obj); }
-
-	/**
-		Get a reference to the std::any object within the asset.
-	  */
-	std::any& object() { return obj; }
-
-	/**
-		Get a const reference to the std::any object within the asset.
-	  */
-	const std::any& object() const { return obj; }
-private:
-	std::any obj;
-};
 
 
 
@@ -75,6 +28,12 @@ private:
 class container
 {
 public:
+
+	//============================================
+	//
+	// resource configuration
+	//
+	//============================================
 
 	/**
 		Return a resource manager for a resourceid
@@ -127,10 +86,154 @@ public:
 
 
 	void clear();
+
+
+	//=========================================
+	//
+	// resource instantiation
+	//
+	//==========================================
+private:
+	struct deferred_work
+	{
+		asset* ass;
+		contextual_base* rm;
+
+		deferred_work(asset* a, contextual_base* r) : ass(a), rm(r) {}
+
+		void inject() {
+			if(ass->phase()==Phase::provided) {
+				rm->inject(ass->object());
+				ass->set_phase(Phase::injected);
+			}
+		}
+		void create()
+		{
+			if(ass->phase()==Phase::injected) {
+				// wait to implement postConstruct
+				ass->set_phase(Phase::created);
+			}
+		}
+	};
+
+	std::stack<deferred_work> deferred_injection;
+	std::stack<deferred_work> deferred_creation;
+	void defer_creation(const deferred_work& work) {
+		if(work.ass->phase()==Phase::provided) {
+			if(work.rm->number_of_injectors()>0) {
+				deferred_injection.push(work);
+				return;
+			} else {
+				work.ass->set_phase(Phase::injected);
+			}
+		}
+		if(work.ass->phase()==Phase::injected) {
+			// for now do nothing smart!
+			deferred_creation.push(work);
+			return;
+		}
+		assert(work.ass->phase()==Phase::created);
+	}
+	inline void defer_creation(asset* ass, contextual_base* rm) {
+		defer_creation(deferred_work(ass,rm));
+	}
+
+	size_t do_deferred() {
+		size_t count=0;
+		while(true) {
+			if(!deferred_injection.empty()) {
+				deferred_work work = deferred_injection.top();
+				deferred_injection.pop();
+				work.inject();
+				count++;
+				defer_creation(work);
+			}
+			else if(!deferred_creation.empty()) {
+				deferred_work work = deferred_creation.top();
+				deferred_creation.pop();
+				work.create();
+				count++;
+				assert(work.ass->phase()==Phase::created);
+			}
+			else
+				break;
+		}
+		return count;
+	}
+
+public:
+	template <typename Resource>
+	inline typename Resource::instance_type get(const Resource& r, Phase p) {
+
+		typedef typename Resource::instance_type instance_type;
+		typedef typename Resource::scope scope;
+
+		// Check phase request
+		if(p==Phase::allocated || p==Phase::disposed)
+			throw instantiation_error(u::str_builder()
+				<< "Cannot return an object in "
+				<< text_phase(p) << " phase, for " << r);
+
+		resourceid rid = r.id();
+
+		// Get an asset
+		auto [ass, isnew] = scope::get_asset(rid);
+		assert(ass!=nullptr);
+
+		if(isnew) {
+			// New asset, must instantiate
+			assert(ass->phase()== Phase::allocated);
+
+			// get the rm
+			auto rm = get_declared(r);
+			if (rm==nullptr) {
+				scope::drop_asset(rid);
+				throw instantiation_error(u::str_builder()
+				<< "Undeclared resource in instantiating "<< r);
+			}
+
+			// build the resource
+			try {
+				rm->provide( ass->object() );
+				ass->set_phase(Phase::provided);
+			} catch(...) {
+				scope::drop_asset(rid);
+				std::throw_with_nested(instantiation_error(u::str_builder()
+					<< "Error while instantiating " << r));
+			}
+			defer_creation(ass, rm);
+
+			// ok, return
+			//if(is_top) do_deferred();
+			//return ass->asset::get_object<instance_type>();
+		} else {
+			// must check for cycles from within provider
+			if(ass->phase()==Phase::allocated) {
+				throw instantiation_error(u::str_builder()
+					<< "Cyclical dependency in instantiating " << r);
+			}
+		}
+
+		while(ass->phase()<p) {
+			if(do_deferred()==0)
+				throw instantiation_error(u::str_builder()
+					<< "Cyclical dependency in instantiating " << r);
+		}
+		return ass->asset::get_object<instance_type>();
+
+	}
+
+
 private:
 	resource_map<contextual_base*> rms;
 
-	enum class Phase { managed, provided, injected, created, disposed };
+
+	//=========================================
+	//
+	// checking the configuration
+	//
+	//==========================================
+
 
 	// dependency graph node
 	struct rsevent {
@@ -182,7 +285,7 @@ private:
 
 	void construct_graph(DepGraph& G) const {
 		for(auto& [rid, rm] : rms) {
-			rsevent* M = G.get(Phase::managed, rid);
+			rsevent* M = G.get(Phase::allocated, rid);
 			rsevent* P = G.get(Phase::provided, rid);
 			rsevent* I = G.get(Phase::injected, rid);
 			rsevent* C = G.get(Phase::created, rid);
@@ -233,8 +336,8 @@ private:
 
 	static const char* text_phase(Phase ph) {
 		switch(ph) {
-		case Phase::managed:
-			return "declaration";
+		case Phase::allocated:
+			return "allocation";
 		case Phase::provided:
 			return "construction";
 		case Phase::injected:
@@ -282,11 +385,25 @@ public:
 	}
 };
 
+//=========================================
+//
+// container access
+//
+//==========================================
+
 
 inline container& providence() {
 	static container c;
 	return c;
 }
+
+template <typename Instance, typename Scope, typename...Tags>
+typename resource<Instance,Scope,Tags...>::instance_type
+resource<Instance,Scope,Tags...>::get(Phase ph) const
+{
+	return providence().get(*this, ph);
+}
+
 
 template <typename Resource>
 inline resource_manager<Resource>* resource_manager<Resource>::get(const Resource& r)

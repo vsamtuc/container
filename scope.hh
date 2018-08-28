@@ -10,10 +10,10 @@ namespace cdi {
 	A container that can materialize resources on demand, providing storage.
 
 	Internally the context holds a map mapping `resourceid`s to `asset`s.
-	The main method of a context is `get()`. When the context is asked for a
-	resource instance, it first performs a lookup in the map. If not found, it
-	initiates a process of instantiation, and stores the result in the map
-	(also returning it).
+	The main method of a context is `get()`. When the context is asked for an
+	asset, given an rid, it first performs a lookup in the map. If not found, it
+	creates an uninitialized asset, and stores the result in the map,
+	also returning it.
 
 	This class is meant to be used in the implementation of scopes.
   */
@@ -22,63 +22,30 @@ class context
 public:
 
 	/**
-		Get a resource instance from this context.
+		Get an asset for given rid, creating one if needed.
 
-		@tparam Resource the resource type
-		@param r the resource
-		@return the provided type for the resource
-		@throw instantiation_error if something went wrong
+		@param rid the resource id for this asset
+		@return a tuple with pointer to asset and a boolean flag indicating
+		if the asset was new.
 
-		If a resource instance is not already in the context,
-		this method calls create() to create one.
+		Note: the information whether this is a new asset is important!
 	  */
-	template <typename Resource>
-	typename Resource::instance_type get(const Resource& r) {
-		using M = utilities::str_builder;
-		using instance_type = typename Resource::instance_type;
-		try {
-			const asset& ass = asset_map.at(r);
-			return ass.get_object<instance_type>();
-		} catch(std::out_of_range) {
-			return create(r);
-		} catch(std::bad_any_cast) {
-			throw instantiation_error(M() << "Cyclic instantiation for " << r.id());
-		} catch(...) {
-			std::throw_with_nested(instantiation_error(M()
-				<< "Internal error during instantiation for " << r.id()));
-		}
+	std::tuple<asset*, bool> get(const resourceid& rid)
+	{
+		auto [iter, isnew] = asset_map.emplace(rid, std::any());
+		return { & iter->second, isnew };
 	}
 
 	/**
-		Create a resource instance in this context.
+		Remove an asset from the context manually.
 
-		@tparam Resource the resource type
-		@param r the resource
-		@return the cretaed resource instance
-		@throw instantiation_error if something went wrong
-
-		Currently this is only meant to be called by get()
-	  */
-	template <typename Resource>
-	typename Resource::instance_type create(const Resource& r) {
-		using instance_type = typename Resource::instance_type;
-		// first, add a null entry, so that we can detect cycles!
-		auto [iter, succ] = asset_map.emplace(r, std::any());
-		assert(succ);
-		asset& ass = (*iter).second;
-		assert(! ass.object().has_value());
-
-		try {
-			resource_manager<Resource>* rm = providence().get_declared(r);
-			if(rm==nullptr)
-				throw instantiation_error(u::str_builder() << "In creating instance, undeclared resource " << r);
-			rm->provide(ass.object());
-			rm->inject(ass.object());
-			return ass.get_object<instance_type>(); // type dependency!
-		} catch(...) {
-			asset_map.erase(iter);
-			std::throw_with_nested(instantiation_error(u::str_builder() << "In providing to " << r));
-		}
+		This call does not dispose of the resource; it is assumed that the
+		caller has already done so.
+		*/
+	void drop(const resourceid& rid)
+	{
+		//  maybe return the value?
+		asset_map.erase(rid);
 	}
 
 	/**
@@ -134,40 +101,44 @@ private:
   */
 struct NewScope
 {
-	/**
-		Create a resource instance in this scope.
 
-		@tparam Resource the resource type
-		@param r the resource
-		@return the new resource instance
-		@throw instantiation_error if something went wrong
-	  */
-	template <typename Resource>
-	inline static typename Resource::instance_type get(const Resource& r) {
-		static_assert( std::is_same_v<typename Resource::scope, NewScope>,
-		"The Resource scope does not match this scope" );
-		return declare(r)->provide_instance();
+	static std::tuple<asset*, bool> get_asset(const resourceid& rid)
+	{
+		// This is broken, in case of any cycle, it will cause
+		// an endless loop!
+		// Soln: figure out some way to return "false" when needed!
+		// Possible: some sort of signalling the caller to "make a copy?"
+		static asset ass(std::any{});
+		ass = asset(std::any());
+		return { (&ass) , true };
 	}
+
+	static void drop_asset(const resourceid& rid)
+	{ }
 };
 
 
 /**
-	Implementation of scopes that are guarded by the existence of
+	Implementation of scopes that are activated by the existence of
 	at least one object instance.
 
 	@tparam Tag For each different type, a new scope class is defined.
 
-	The Tag type is only used to instantiate different scopes.
+	The Tag type is only used to instantiate different scopes. Any type can
+	be used, usually an empty `struct`.
 
 	A scope defined by class instances of this template contains an internal
-	context where objects are stored.
+	context where objects are stored and is activatable in a turnstile
+	fashion. Internally, the class instance maintains a (static member) counter,
+	available through the static method `count()`.
 
-	A scope defined by a (concrete) class GuardedScope<T> is activatable in a turnstile
-	fashion. Each instance of the type GuardScope<T> (on the stack, on the heap, as
-	a subclass inside another class, in an array etc.)  increases the turnstile `count()`.
-	The scope is active only if the turnstile count in non-zero.
+	Each object instance of the class instance (on the stack,
+	on the heap, as a subclass instance, in an array etc.)  increases the
+	turnstile `count()`. The scope is active only if the turnstile count
+	in non-zero.
 
-	This class is non-copyable but it is movable (moving it does not affect the turnstile count)
+	This template's class instances are copyable and movable
+	(moving them does not affect the turnstile count)
   */
 template <typename Tag>
 struct GuardedScope
@@ -182,29 +153,32 @@ struct GuardedScope
 	  */
 	inline ~GuardedScope() {
 		-- _n;
-		if(_n==0) ctx.clear();
+		if(_n==0)
+			try {
+				ctx.clear();
+			} catch(...) { }
 	}
 
-	GuardedScope(const GuardedScope<Tag>&)=delete;
-	GuardedScope& operator=(const GuardedScope<Tag>&)=delete;
+	inline GuardedScope(const GuardedScope<Tag>&) noexcept { ++_n; }
+	inline GuardedScope& operator=(const GuardedScope<Tag>&) noexcept { ++_n; };
 
-	/** Move operator (has no effect) */
+	/** Move operators (have no effect) */
 	inline GuardedScope(GuardedScope&& _other) noexcept { }
+	inline GuardedScope& operator=(GuardedScope&& _other) noexcept { }
 
-	/**
-		Static method that returns a resource instance in this scope.
-		@tparam Resource the resource type
-		@param r the resource
-		@return a resource instance from this scope
-		@throws inactive_scope_error if the scope is not active
-		@throws instantiation_error if contextual instantiation fails
-	  */
-	template <typename Resource>
-	static inline typename Resource::instance_type get(const Resource& r) {
-		namespace u = utilities;
+
+	static inline auto get_asset(const resourceid& rid)
+	{
 		if(! is_active()) throw inactive_scope_error(u::str_builder()
-			<< "Trying to allocate " << r.id() << " while scope is inactive");
-		return ctx.get(r);
+			<< "Trying to allocate " << rid << " while scope is inactive");
+		return ctx.get(rid);
+	}
+
+	static inline void drop_asset(const resourceid& rid)
+	{
+		if(! is_active()) throw inactive_scope_error(u::str_builder()
+			<< "Trying to drop " << rid << " while scope is inactive");
+		ctx.drop(rid);
 	}
 
 	/**
@@ -235,7 +209,7 @@ private:
 
 	A scope defined by a (concrete) class LocalScope<T> is active
 	when at least an instance of this class exists. However, instances
-	of LocalScope<T> expect (and throw an exception unless) that they
+	of LocalScope<T> expect that (and throw an exception unless) they
 	have nested lifetimes. This can be ensured by only creating them
 	as local variables on the stack, which is the indended use.
 
@@ -255,20 +229,18 @@ public:
 		current_ctx = saved_ctx;
 	}
 
-	/**
-		Static method that returns a resource instance in this scope.
-		@tparam Resource the resource type
-		@param r the resource
-		@return a resource instance from this scope
-		@throws inactive_scope_error if the scope is not active
-		@throws instantiation_error if contextual instantiation fails
-	  */
-	template <typename Resource>
-	static inline typename Resource::instance_type get(const Resource& r) {
-		namespace u = utilities;
+	static inline std::tuple<asset*, bool> get_asset(const resourceid& rid)
+	{
 		if(! is_active()) throw inactive_scope_error(u::str_builder()
-			<< "Trying to allocate " << r.id() << " while scope is inactive");
-		return current_ctx->get(r);
+			<< "Trying to allocate " << rid << " while scope is inactive");
+		return current_ctx->get(rid);
+	}
+
+	static inline void drop_asset(const resourceid& rid)
+	{
+		if(! is_active()) throw inactive_scope_error(u::str_builder()
+			<< "Trying to drop " << rid << " while scope is inactive");
+		current_ctx->drop(rid);
 	}
 
 	/**
@@ -296,19 +268,14 @@ private:
 class GlobalScope {
 public:
 
-	/**
-		Static method that returns a resource instance in this scope.
-		@tparam Resource the resource type
-		@param r the resource
-		@return a resource instance from this scope
-		@throws instantiation_error if contextual instantiation fails
-	  */
-	template <typename Resource>
-	static inline typename Resource::instance_type get(const Resource& r) {
-		static_assert( std::is_same_v<typename Resource::scope, GlobalScope >,
-		"The Resource scope does not match this scope" );
+	static inline std::tuple<asset*, bool> get_asset(const resourceid& rid)
+	{
+		return global_context.get(rid);
+	}
 
-		return global_context.get(r);
+	static inline void drop_asset(const resourceid& rid)
+	{
+		global_context.drop(rid);
 	}
 
 	/**
@@ -318,8 +285,7 @@ public:
 		global_context.clear();
 	}
 
-
-//private:
+private:
 	inline static context global_context;
 };
 
@@ -328,8 +294,6 @@ public:
   */
 template <typename Value, typename ... Tags>
 using Global = resource<Value, GlobalScope, Tags...>;
-
-
 
 inline void container::clear() {
 	GlobalScope::clear();
