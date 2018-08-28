@@ -22,7 +22,7 @@ using std::string;
 
 	This is an abstract class, that requires two abstract virtual
 	methods to be defined by a subclass. Every qualifier class must
-	inherit publicly from this class. 
+	inherit publicly from this class.
 
 	The qualifier class can contain additional state. In order to
 	work correctly with `qual_base`, the subclass must provide
@@ -32,26 +32,26 @@ using std::string;
 	  3. an output function for printing the additional state
 
 	In the following example, qualifier type `Foo` is implemented by
-	class `QUAL_CLASS(Foo)`.  QUAL_CLASS is a preprocessor macro that 
+	class `QUAL_CLASS(Foo)`.  QUAL_CLASS is a preprocessor macro that
 	mangles the name `Foo` by adding a suffix. The default suffix is
-	'$qualifier', which introduces a '$' into the name. If this is 
+	'$qualifier', which introduces a '$' into the name. If this is
 	a problem, you can change the definition of the two macros
 	QUAL_CLASS and QUAL_SUFFIX, to something your compiler will dig.
 
-	QUAL_CLASS(Foo) and provides additional state (in this case, 
+	QUAL_CLASS(Foo) and provides additional state (in this case,
 	an integer field `x`). A possible implementation is the following:
 	```
-	struct QUAL_CLASS(Foo) : qual_base 
+	struct QUAL_CLASS(Foo) : qual_base
 	{
 		// call constructor of qual_base
-		QUAL_CLASS(Foo)(int _x) 
-		:	qual_base(typid(QUAL_CLASS(Foo)), std::hash<int>()(x))), 
+		QUAL_CLASS(Foo)(int _x)
+		:	qual_base(typid(QUAL_CLASS(Foo)), std::hash<int>()(x))),
 			x(_x)
 		{ }
 
 		// provide equality test including the value of x
 		virtual bool equals(const qual_base& other) const override {
-			return qual_base::equals(other) && 
+			return qual_base::equals(other) &&
 				x == static_cast<const QUAL_CLASS(Foo)&>(other).x;
 		}
 
@@ -83,12 +83,12 @@ struct qual_base
 		hash code for the object.
 
 		If qualifier type (i.e., a subclass) does not wish to provide
-		the hash value as a constructor argument `vhash`, then it is 
+		the hash value as a constructor argument `vhash`, then it is
 		possible to set the value later (probably in the body of the
 		subclass constructor) by calling method  set_value_hash().
 
 	  */
-	inline qual_base(const std::type_index& ti, size_t vhash) 
+	inline qual_base(const std::type_index& ti, size_t vhash)
 	: _type(ti), hcode(compute_hash(ti, vhash)) { }
 
 	/// Destructor
@@ -100,17 +100,17 @@ struct qual_base
 	static inline const std::string qual_suffix = QUAL_SUFFIX;
 
 	/**
-		Return the name of the qualifier type. 
+		Return the name of the qualifier type.
 		@return the qualifier type name.
 
-		The qualifier type name is computed from the full class name 
+		The qualifier type name is computed from the full class name
 		of the qualifier type (e.g., `"QUAL_CLASS(Foo)"`), but dropping
 		the suffix QUAL_SUFFIX, if it exists.
 	  */
 	virtual string name() const {
-		string ret = u::demangle(type().name()); 
+		string ret = u::demangle(type().name());
 		// Remove a suffix if one is there! If not, leave the name as is.
-		if(ret.size() > qual_suffix.size() 
+		if(ret.size() > qual_suffix.size()
 			&& std::equal(ret.end()-qual_suffix.size(), ret.end(), qual_suffix.begin()))
 			ret.resize(ret.size()-qual_suffix.size());
 		return ret;
@@ -139,7 +139,7 @@ struct qual_base
 	}
 
 	/**
-		Match this qualifier to another qualifier.	
+		Match this qualifier to another qualifier.
 	  */
 	virtual inline bool matches(const qual_base& other) const {
 		return equals(other);
@@ -154,7 +154,7 @@ struct qual_base
 		This method will output the name of the qualifer class `name()`,
 		prefixed by the character '@'.
 
-		A subclass containing more state should override this method to print 
+		A subclass containing more state should override this method to print
 		the additional state.
 	  */
 	virtual inline std::ostream& output(std::ostream& s) const {
@@ -166,7 +166,7 @@ protected:
 	/**
 		Cache a hash_code for the object, given a hash for additional state.
 		@param vhash a hash value for the additional state.
-	
+
 		A subclass must provide a hash value at initialization, as a parameter
 		constructor. If this is inconvenient, or the hash value for additional state
 		changes, this method can be used to recompute and cache the new hash value.
@@ -175,17 +175,17 @@ protected:
 		hcode = compute_hash(_type, vhash);
 	}
 
-	/** 
+	/**
 		Compute the hash_code for an object with the given type index and value hash.
 		@param ti the type index of the qualifier class
 		@param vhash a hash value for the additional state
 	  */
-	inline static size_t compute_hash(const std::type_index& ti, size_t vhash) 
+	inline static size_t compute_hash(const std::type_index& ti, size_t vhash)
 	{
 		size_t seed = 0;
 		u::hash_combine(seed, ti.hash_code());
 		u::hash_combine(seed, vhash);
-		return seed;			
+		return seed;
 	}
 
 private:
@@ -222,7 +222,7 @@ namespace detail {
 		typedef typename qual_state_traits<Value>::equal_to equal_to;
 		typedef typename qual_state_traits<Value>::printer printer;
 
-		qual_state(const std::type_index& ti, const value_type& v) 
+		qual_state(const std::type_index& ti, const value_type& v)
 		: qual_base(ti, hasher()(v)), val(v) { }
 
 		const value_type& value() const { return val; }
@@ -249,7 +249,7 @@ namespace detail {
 	{
 		typedef Qual qualifier_type;
 
-		qual_impl(const Value& v) 
+		qual_impl(const Value& v)
 		: qual_state<Value>(typeid(qualifier_type), v) { }
 	};
 
@@ -281,7 +281,7 @@ extern qualifier Default, All, Null;
 	Qualifiers can also take a value as attribute.
 
 	Instances of class qualifier are std::shared_ptr wrappers, that point to an underlying
-	implementation object. 
+	implementation object.
 
 	There are some standard qualifiers: `Default` and 'All'.
 
@@ -331,7 +331,7 @@ public:
 			(*this) = Null;
 	}
 
-	
+
 	/// Compare two qualifiers for equality
 	inline bool operator==(const qualifier& other) const {
 		if(sptr == other.sptr)
@@ -356,7 +356,7 @@ public:
 		return sptr->matches( * other.sptr );
 	}
 
-	/// Qualifier name. 
+	/// Qualifier name.
 	string name() const { return sptr->name(); }
 
 	/// Type index of the qualifier type
@@ -381,7 +381,7 @@ public:
 	template <typename Value>
 	const Value& value() const {
 		const detail::qual_state<Value>* ptr = dynamic_cast<const detail::qual_state<Value>*>(sptr.get());
-		if(ptr) 
+		if(ptr)
 			return ptr->value();
 		else
 			throw std::bad_cast();
@@ -400,8 +400,8 @@ public:
 		```
 	  */
 	template <typename QualType>
-	std::shared_ptr<const QualType> get() const { 
-		return std::dynamic_pointer_cast<const QualType>(sptr); 
+	std::shared_ptr<const QualType> get() const {
+		return std::dynamic_pointer_cast<const QualType>(sptr);
 	}
 
 private:
@@ -470,16 +470,16 @@ public:
 	//qualifiers({Default});
 
 	/// Create a singleton set containing `Q`.
-	qualifiers(const qualifier& Q) 
-	: qset({Q}) 
-	{ 
+	qualifiers(const qualifier& Q)
+	: qset({Q})
+	{
 		compute_hash();
 	}
 
 	/// Create a set from an initialization list
 	qualifiers(const std::initializer_list<qualifier>& init)
-	: qset(init) 
-	{ 
+	: qset(init)
+	{
 		compute_hash();
 	}
 
@@ -488,7 +488,7 @@ public:
 
 	/**
 		Check membership in the set of a qualifier with the same type.
-		
+
 		@param q the qualifier whose type is used to check membership
 		@return true if a qualifier of this type belongs to the set
 		@see contains()
@@ -533,7 +533,7 @@ public:
 		// check that everything in this matches something in other
 		for(auto& a : qset) {
 			bool matched=false;
-			for(auto& b : other.qset) 
+			for(auto& b : other.qset)
 				if(a.matches(b)) { matched=true; break; }
 			if(! matched) return false;
 		}
@@ -551,13 +551,13 @@ public:
 	/// Checks set equality
 	inline bool operator==(const qualifiers& other) const
 	{
-		if(size()!=other.size()) 
+		if(size()!=other.size())
 			return false;
 		for(auto& q : qset) {
 			if(! other.contains(q))
 				return false;
 		}
-		return true;	
+		return true;
 	}
 
 
@@ -572,7 +572,7 @@ public:
 
 private:
 	struct hash_types {
-		inline size_t operator()(const qualifier& q) const { 
+		inline size_t operator()(const qualifier& q) const {
 			return q.type().hash_code();
 		}
 	};
@@ -627,7 +627,7 @@ public:
 			qset.erase(it);
 			return true;
 		}
-		return false;		
+		return false;
 	}
 
 	/**
@@ -636,7 +636,7 @@ public:
 	  */
 	void update(const qualifier& q) {
 		delete_similar(q);
-		auto ret = qset.insert(q);
+		auto ret [[maybe_unused]] = qset.insert(q);
 		assert(ret.second);
 		hcode ^= q.hash_code();
 	}
@@ -661,8 +661,8 @@ public:
 	/**
 		Empty the set.
 	  */
-	void clear() { 
-		qset.clear(); hcode=0; 
+	void clear() {
+		qset.clear(); hcode=0;
 	}
 
 
@@ -689,7 +689,7 @@ private:
 /// Output streaming for qualifiers
 inline std::ostream& operator<<(std::ostream& s, const qualifiers& q)
 {
-	std::copy(q.begin(), q.end(), 
+	std::copy(q.begin(), q.end(),
 		std::ostream_iterator<qualifier>(s, " "));
 	return s;
 }

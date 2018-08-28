@@ -70,9 +70,9 @@ public:
 
 	void test_provider_int2()
 	{
+		// This is a test for clearing the container between tests!
 		test_provider_int();
 	}
-
 
 	struct Foo {
 		int x;
@@ -81,6 +81,7 @@ public:
 		inline static int count =0;
 		inline static int leaked = 0;
 	};
+
 
 	void test_provider_ptr()
 	{
@@ -140,6 +141,26 @@ public:
 			TS_ASSERT_EQUALS(a->x, 4);
 		}
 		TS_ASSERT_EQUALS(Foo::leaked, 0);
+	}
+
+	static int weird_func() {
+		static int count=0;
+		return count++;
+	}
+
+	// Test that passing std::bind objects to a provider, injector,
+	// etc delays their evaluation
+	//
+	void test_bind_arg()
+	{
+		resource<int> q({});
+		provide(q, [](auto x) { return x; }, bind(weird_func));
+
+		TS_ASSERT_EQUALS(weird_func(), 0);
+		TS_ASSERT_EQUALS(weird_func(), 1);
+		TS_ASSERT_EQUALS(q.get(), 2);
+		TS_ASSERT_EQUALS(weird_func(), 3);
+		TS_ASSERT_EQUALS(q.get(), 2);
 	}
 
 	void test_phase()

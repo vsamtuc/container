@@ -355,6 +355,7 @@ private:
 			return "disposal";
 		}
 		assert(false);
+		return "** unknown phase value **";
 	}
 
 public:
