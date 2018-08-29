@@ -175,48 +175,61 @@ public:
 		@param p the minimum phase of the resource
 		@return the resource instance
 
+		This is a thin wrapper around `get_any()`, casting to the
+		correct type.
+	  */
+	template <typename Resource>
+	inline typename Resource::return_type get(const Resource& r, Phase p) {
+		return std::any_cast<typename Resource::return_type>(get_any(r, p));
+	}
+
+	/**
+		Get an instance with given phase polymorphically.
+
+		@param rid the resourceid to return
+		@param p the minimum phase of the resource instance
+		@return reference to the resource instance stored in `std::any`
+
 		This function returns a resource instance for the given
 		resource `r`, not necessarily completely created. This call
 		is not intended for end-users; it is the main call responsible
 		for instantiating resources, and at the heart of the container's
 		operation.
 	  */
-	template <typename Resource>
-	inline typename Resource::return_type get(const Resource& r, Phase p) {
-		typedef typename Resource::scope scope;
-
+	inline const std::any& get_any(const resourceid& rid, Phase p)
+	{
 		// Check phase request
 		if(p==Phase::allocated || p==Phase::disposed)
 			throw instantiation_error(u::str_builder()
 				<< "Cannot return an object in "
-				<< text_phase(p) << " phase, for " << r);
+				<< text_phase(p) << " phase, for " << rid);
 
-		resourceid rid = r.id();
+
+		// get the rm
+		contextual_base* rm;
+		try {
+			rm = rms.at(rid);
+		} catch(std::out_of_range) {
+			throw instantiation_error(u::str_builder()
+				<< "Undeclared resource in instantiating "<< rid);
+		}
 
 		// Get an asset
-		auto [ass, isnew] = scope::get_asset(rid);
+		auto [ass, isnew] = rm->scope().get(rid);
 		assert(ass!=nullptr);
 
 		if(isnew) {
 			// New asset, must instantiate
 			assert(ass->phase()== Phase::allocated);
 
-			// get the rm
-			auto rm = get_declared(r);
-			if (rm==nullptr) {
-				scope::drop_asset(rid);
-				throw instantiation_error(u::str_builder()
-				<< "Undeclared resource in instantiating "<< r);
-			}
-
 			// build the resource
 			try {
 				rm->provide( ass->object() );
 				ass->set_phase(Phase::provided);
 			} catch(...) {
-				scope::drop_asset(rid);
+				rm->scope().drop(rid);
 				std::throw_with_nested(instantiation_error(u::str_builder()
-					<< "Error while instantiating " << r));
+					<< "Error while instantiating " << rid));
 			}
 			defer_creation(ass, rm);
 
@@ -227,7 +240,7 @@ public:
 			// must check for cycles from within provider
 			if(ass->phase()==Phase::allocated) {
 				throw instantiation_error(u::str_builder()
-					<< "Cyclical dependency in instantiating " << r);
+					<< "Cyclical dependency in instantiating " << rid);
 			}
 		}
 
@@ -238,10 +251,10 @@ public:
 				// there were no deferred steps executed,
 				// there must be a cycle...
 				throw instantiation_error(u::str_builder()
-					<< "Cyclical dependency in instantiating " << r);
+					<< "Cyclical dependency in instantiating " << rid);
 		}
-		return ass->asset::get<typename Resource::return_type>();
-
+		//return ass->asset::get<typename Resource::return_type>();
+		return ass->object();
 	}
 
 
@@ -423,29 +436,44 @@ inline container& providence() {
 
 namespace detail {
 
-template <typename Arg, typename Scope, typename ... Tags>
-auto inject_partial(const resource<Arg,Scope,Tags...>& r, Phase ph)
- -> typename resource<Arg,Scope,Tags...>::return_type
+template <typename Resource>
+auto inject_partial(const Resource& r, Phase ph)
+ -> typename Resource::return_type
  {
 	 return providence().get(r, ph);
  }
 
 }
 
-template <typename Instance, typename Scope, typename...Tags>
-typename resource<Instance,Scope,Tags...>::return_type
-resource<Instance,Scope,Tags...>::get() const
+template <typename Instance>
+typename resource<Instance>::return_type
+resource<Instance>::get() const
 {
 	return providence().get(*this, Phase::created);
 }
 
+
+/**
+	Return a resource instance for the given resource.
+
+	@tparam Resource the resource type
+	@param r the resource to inject
+	@throws instantiation_error if it failed to retrieve the resource
+
+	This function retrieves a resource instance for the given resource
+	based on the current context.
+  */
+template <typename Resource>
+inline typename Resource::return_type
+get(const Resource& r) {
+	return providence().get(r, Phase::created);
+}
 
 template <typename Resource>
 inline resource_manager<Resource>* resource_manager<Resource>::get(const Resource& r)
 {
 	return providence().get(r);
 }
-
 
 
 } // end namespace cdi

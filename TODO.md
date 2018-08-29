@@ -3,42 +3,45 @@
 ## Immediate
   - add resource<...> API for put()
 
-  - Allow unwrap_inject to support resource types to be passed
-    explicitly. Currently, any resource<...>-typed object gets injected
-    into the call.
-
-  - fix the code, to handle storing stuff as std::decay_t<>, and getting
-     const T&  (think of a string)
-
-  - Rethink the scope API, to make it easy to write new ones. 
-
-
 ## Next steps
 
-  - Qualifiers for the resource table affecting provision at runtime.
-  	The idea is to share configuration between multiple resources that
-  	are "similar". Somehow, this needs to pass the resource to the provider,
-  	injectors, etc.
+-	Resource managers could be initialized from other RMs.
+  The idea is to share configuration between multiple resources that
+  are "similar", no need to repeat same code. Thus, we need an
+  "inherits" semantics, and possible modifications/overrides.
 
-  - scope determination done at runtime: resource<I , void> types,
-  	but must have qualifier provide the scope!
+
+- Qualifiers for the resource table affecting provision at run time.
+  An example is to have a set of resources R1,...,Rn and export one
+  of them as "default", depending on configuration. One idea in
+  "pseudo code"
+  ```
+  resource<qualifier,...>  my_choice;
+
+  resource<T...> chosen_resource = switch(my_choice) // inject qualifier
+    .alternative(q1, R1)  // match my_choice==q1
+    .alternative(q2, R2)  //   ... and so on ...
+       ...
+    .default(Rd)
+  ```
+  where selection should be done at __instantiation time__, instead
+  of at configuration time. This could be done in the provider naturally,
+  if not for issues related to cycles...
+
+  N.B. this is an advanced form of aliasing, so maybe look at above issue
+  first, or together.
 
 
 ## Future/open
-  - support multithreading (maybe not too hard)
+  - support multithreading (maybe hard)
 
   - faster qualifiers equality (cache?)
 
-  - User-defined qualifier matching (currently we only support equality).
-    Ideas:
-    - a `query` class based on matching, as follows:
-      Each qual `q` can have a predicate `q.matches(other)`.
-      Then, for  `Q` and `Other` qual sets, the predicate
-      Q.matches(O) is "forall q in Q, exists o in Other : q.matches(o)
-      and forall o in O, exists q in Q: q.matches(o)"
+  - how to leverage qualifier matching?
 
   - what is the purpose of 'class resource_manager'? All the info is in
     'class contextual'
 
   - Scopes could not use static variables (including context). They
-    could use the container. Problem: what about thread_local ?
+    could use the container. Problem: what about thread_local (see
+    multithreading) ?

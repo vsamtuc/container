@@ -6,6 +6,8 @@
 namespace cdi {
 
 
+
+
 /**
 	A container that can materialize resources on demand, providing storage.
 
@@ -289,11 +291,7 @@ private:
 	inline static context global_context;
 };
 
-/**
-	Convenience declaration for resources in the global scope.
-  */
-template <typename Value, typename ... Tags>
-using Global = resource<Value, GlobalScope, Tags...>;
+
 
 inline void container::clear() {
 	GlobalScope::clear();
@@ -304,6 +302,76 @@ inline void container::clear() {
 		delete rm;
 	}
 	rms.clear();
+}
+
+
+//==========================================
+//
+// Scope support
+//
+//==========================================
+
+
+/**
+	This class can be used to define qualifiers that
+	determine a scope.
+
+	To create a qualifier, just use
+	```
+	struct WeirdScope { ...defines scope API... };
+
+	qualifier Weird { new scope_proxy<WeirdScope>; };
+	```
+
+	To obtain the scope api, simply do
+	```
+	std::shared_ptr<const scope_api> api = Weird.get<scope_api>();
+	```
+	or, more elegantly,
+	```
+	auto api = Weird.get<scope_api>();
+	```
+
+  */
+template <typename ScopeClass>
+struct scope_proxy : scope_api, detail::qual_impl<ScopeClass>
+{
+	std::tuple<asset*, bool>
+	get(const resourceid& rid) const override {
+		return ScopeClass::get_asset(rid);
+	}
+
+	void drop(const resourceid& rid) const override {
+		ScopeClass::drop_asset(rid);
+	}
+
+	virtual string name() const override {
+		return u::demangle(typeid(ScopeClass).name());
+	}
+};
+
+
+inline const qualifier New { std::make_shared<scope_proxy<NewScope>>() };
+inline const qualifier Global { std::make_shared<scope_proxy<GlobalScope>>() };
+
+
+inline qualifier scope_spec(const qualifiers& qset)
+{
+	std::vector< qualifier > scopes;
+	qset.collect<const scope_api>(std::back_inserter(scopes));
+
+	// what to do with a multi-scope qualset?
+	if(scopes.size()>1)
+		throw config_error(u::str_builder() <<
+			"Too many scopes specified for qualset " << qset);
+
+	if(scopes.size()==1)
+		return scopes[0];
+	else {
+		// We make global the default scope, chosen when no
+		// scope spec appears in qualset
+		return Global;
+	}
 }
 
 

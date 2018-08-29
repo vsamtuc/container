@@ -23,19 +23,18 @@ class InContainer : public CxxTest::TestSuite
 //
 //=================================
 
-
-
-
-
 class ProviderSuite : public InContainer
 {
 public:
 
+	void test_dont_allow_many_scopes()
+	{
+		TS_ASSERT_THROWS( resource<int>({Global, New}).declare(), config_error );
+	}
 
 	struct LocalScope : GuardedScope<LocalScope> {};
 
-	template <typename Value, typename ...Tags>
-	using Local = resource<Value, LocalScope , Tags...>;
+	static inline qualifier Local { new scope_proxy<LocalScope>() };
 
 	static int foovoid() { return 100; }
 	static int fooint(int a) { return a+10; }
@@ -49,8 +48,8 @@ public:
 
 		//auto Rvoid = resource<int, GlobalScope>(Name("foovoid"));
 		auto Rvoid = resource<int>(Name("foovoid"));
-		auto Rval = Global<int>(Name("fooint_val"));
-		auto Rint = Local<int, int>({});
+		auto Rval = resource<int>(Name("fooint_val"));
+		auto Rint = resource<int>({Local});
 
 		provide(Rvoid, foovoid);
 		provide(Rval, fooint, 10);
@@ -85,7 +84,7 @@ public:
 
 	void test_provider_ptr()
 	{
-		using RFoo = Global< shared_ptr<Foo> >;
+		using RFoo = resource< shared_ptr<Foo> >;
 		auto Foo1 = RFoo({});
 		auto Foo2 = RFoo(Name("foo2"));
 
@@ -110,13 +109,13 @@ public:
 
 	void test_provider_shared_ptr()
 	{
-		using RFoo = Local< Foo* >;
+		using RFoo = resource< Foo* >;
 
 		{
 			LocalScope guard;
 
-			auto Foo1 = RFoo({});
-			auto Foo2 = RFoo(Name("foo2"));
+			auto Foo1 = RFoo({Local});
+			auto Foo2 = RFoo({Local, Name("foo2")});
 
 			// dependency on undeclared resource Foo1
 			//provide(Foo2, [](Foo* a){ return new Foo(a->x+1); }, Foo1);

@@ -8,10 +8,37 @@
 using namespace std;
 using namespace cdi;
 
+//
+// Scope instances can be used to control context,
+// therefore, we need a qualifier to
+//
+
+
+qualifier GlobalS { new scope_proxy<GlobalScope> };
+qualifier NewS { new scope_proxy<NewScope> };
 
 class ScopeTestSuite : public CxxTest::TestSuite
 {
 public:
+
+	void test_print_globalS()
+	{
+		cout << GlobalS << endl;
+		auto proxy = GlobalS.get<scope_api>();
+		TS_ASSERT( proxy );
+		proxy->drop(resource<int>({}).id());
+
+		TS_ASSERT_EQUALS(GlobalS, qualifier(new scope_proxy<GlobalScope>));
+		TS_ASSERT_DIFFERS(NewS, qualifier(new scope_proxy<GlobalScope>));
+
+		qualifiers Q { GlobalS, NewS };
+		TS_ASSERT_EQUALS(Q.size(),2);
+
+		vector< qualifier > scopes;
+		Q.collect<scope_api>(back_inserter(scopes));
+		cout << Q << endl;
+		TS_ASSERT_EQUALS(scopes.size(), 2);
+	}
 
 	struct Foo {
 		int x;
@@ -24,7 +51,7 @@ public:
 	struct B;
 	struct A {
 
-		static inline auto rsrc = Global<A*>({});
+		static inline auto rsrc = resource<A*>(Global);
 
 		B* other;
 		A(B* o) : other(o) { }
@@ -44,7 +71,7 @@ public:
 
 	void test_new_scope()
 	{
-		auto r1 = resource<Foo*,NewScope>({});
+		auto r1 = resource<Foo*>({New});
 		provide(r1, [](){ return new Foo(5); });
 		dispose(r1, [](auto p) { delete p; });
 
@@ -66,7 +93,7 @@ public:
 	{
 		TS_ASSERT_EQUALS(providence().resource_managers().size(), 0);
 
-		auto r1 = resource<std::shared_ptr<Foo>, GlobalScope>({});
+		auto r1 = resource<std::shared_ptr<Foo>>({Global});
 		auto rm1 = declare(r1);
 		TS_ASSERT_EQUALS(rm1, declare(r1));
 		provide(r1, [](){ return std::make_shared<Foo>(42); });
@@ -107,7 +134,7 @@ public:
 			string c;
 		};
 
-		auto r = Global<Info*>({});
+		auto r = resource<Info*>({Global});
 
 		string get_c;
 
@@ -212,10 +239,11 @@ public:
 	}
 
 	struct TempScope : LocalScope<TempScope> { };
+	static inline qualifier Temp { new scope_proxy<TempScope> };
 
 	void test_local_scope()
 	{
-		auto r = resource<int*, TempScope>({});
+		auto r = resource<int*>({Temp});
 		r	.provide([]() { return new int(10); })
 			.dispose([](auto self) { delete self; });
 

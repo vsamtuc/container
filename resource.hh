@@ -5,13 +5,6 @@
 namespace cdi {
 
 
-
-/**
-	Empty template used to hold a sequence of tag types.
-	@tparam Tags the sequence of tag types.
-  */
-template <typename ... Tags> struct tag_sequence  { };
-
 // =====================
 // forward
 // =====================
@@ -22,6 +15,14 @@ class GlobalScope; 			// the default scope
 class resourceid;  			// type-erased resource id
 
 std::ostream& operator<<(std::ostream&, const resourceid&);
+
+
+
+//=================================
+//
+// resources
+//
+//=================================
 
 /**
 	A resource is a descriptor combining the type, scope and qualifiers of
@@ -58,7 +59,7 @@ std::ostream& operator<<(std::ostream&, const resourceid&);
 	the resouce API is used.
 
   */
-template <typename Instance, typename Scope=GlobalScope , typename ... Tags>
+template <typename Instance>
 struct resource
 {
 	static_assert( std::is_same_v<Instance, std::decay_t<Instance>>,
@@ -67,7 +68,7 @@ struct resource
 	);
 
 	/// the resource type
-	typedef resource<Instance, Scope, Tags...> resource_type;
+	typedef resource<Instance> resource_type;
 
 	/// The type of the contextual object type
 	typedef Instance instance_type;
@@ -80,17 +81,14 @@ struct resource
 			>
 		return_type;
 
-	/// The scope of the contextual object type
-	typedef Scope scope;
-
-	/// The tags of the contextual object type
-	typedef tag_sequence<Tags...> tags;
 
 	/// Construct an instance
-	inline resource(const qualifiers& _q) : q(_q) { }
+	inline resource(const qualifiers& _q)
+		: q(_q) { }
 
 	/// Construct an instance
-	inline resource(qualifiers&& _q) : q(_q) { }
+	inline resource(qualifiers&& _q)
+		: q(_q) { }
 
  	/// The qualifiers of the contextual object type
  	inline const qualifiers& quals() const { return q; }
@@ -200,7 +198,7 @@ struct resource
 	const resource_type& dispose(Callable func, Args&& ... args ) const;
 
 private:
-	const qualifiers q;
+	qualifiers q;
 };
 
 
@@ -220,6 +218,8 @@ private:
   */
 class resourceid
 {
+public:
+
 	/**
 		Construct a new resource id.
 		@param ti the type id of the resource
@@ -229,16 +229,14 @@ class resourceid
 	: sptr(std::make_shared<rid_impl>(ti,q))
 	{ }
 
-public:
-
 	/**
 		Construct a new resource id.
 		@param ti the type id of the resource
 		@param q the qualifiers of the resource
 	  */
-	template <typename Instance, typename Scope, typename ...Tags>
-	resourceid(const resource<Instance,Scope,Tags...>& r)
-	: resourceid(typeid(resource<Instance,Scope,Tags...>), r.quals())
+	template <typename Instance>
+	resourceid(const resource<Instance>& r)
+	: resourceid(typeid(resource<Instance>), r.quals())
 	{ }
 
 	/// Equality comparison
@@ -306,8 +304,8 @@ inline std::ostream& operator<<(std::ostream& s, const resourceid& r)
 	return s;
 }
 
-template <typename V, typename S, typename ... T>
-resourceid resource<V,S,T...>::id() const {
+template <typename Instance>
+resourceid resource<Instance>::id() const {
 	return resourceid(*this);
 }
 
@@ -336,93 +334,6 @@ public:
 	inline bool contains(const resourceid& rid) const { return find(rid)!=end(); }
 };
 
-
-//==================================================
-//
-// Functional resource API
-//
-//==================================================
-
-
-/**
-	Return a resource instance for the given resource.
-
-	@tparam Resource the resource type
-	@param r the resource to inject
-	@throws instantiation_error if it failed to retrieve the resource
-
-	This function retrieves a resource instance for the given resource
-	based on the current context.
-  */
-template <typename Instance, typename Scope, typename...Tags>
-inline Instance get(const resource<Instance, Scope, Tags...>& r) {
-	return r.get();
-}
-
-/**
-	Return the resource manager for a resource
-	@tparam Resource the resource type
-	@param r the resource
-	@return the resource manager for this resource
-  */
-template <typename Resource>
-inline resource_manager<Resource>* declare(const Resource& r) { return r.manager(); }
-
-/**
-	Register a new provider for a resource.
-
-	@tparam Resource the resource type
-	@tparam Callable the callable provider
-	@tparam Args a sequence of argument types to pass to the callable
-	@param r the resource to be provisioned with a provider
-	@param func the function called by the new provider
-	@param args a sequence of arguments to be given to func at invocation
-	@throws config_error if a provider already exists for this resource
-
-	This call registers a new provider for resource `r`. When method
-	provide() is invoked on the provider, `func` is called with the same
-	number of parameters as passed to `args`. The actual parameters to
-	the call are computed as follows:
-	* if an argument is a resource instance, the resource will be
-	  injected at the time `func` is called.
-	* if an argument is any other type, the argument is stored and
-	  provided to `func` when it is called.
-	The requirements for (non-resource) arguments are the same as in std::bind().
- */
-template <typename Resource, typename Callable,	typename ... Args>
-inline auto provide(const Resource& r, Callable&& func, Args&& ... args  )
-{
-	return r.provide(std::forward<Callable>(func), std::forward<Args>(args)...);
-}
-
-template <typename Resource, typename Callable, typename...Args>
-inline auto initialize(const Resource& r, Callable&& func, Args&& ... args )
-{
-	return r.initialize(std::forward<Callable>(func), std::forward<Args>(args)...);
-}
-
-
-/**
-	Register a new disposer for a resource.
-
-	@tparam Resource the resource type
-	@tparam Callable the callable disposer
-	@tparam Args a sequence of argument types to pass to the callable
-	@param r the resource to be provisioned with a disposer
-	@param func the function called by the new disposer
-	@param args a sequence of arguments to be given to func at invocation
-	@throws config_error if a disposer already exists for this resource
-
-	This is a wrapper function for r.dispose(...).
-
-	@see resource::dispose()
-	@see provide()
- */
-template <typename Resource, typename Callable, typename...Args>
-inline auto dispose(const Resource& r, Callable&& func, Args&& ... args )
-{
-	return r.dispose(std::forward<Callable>(func), std::forward<Args>(args)...);
-}
 
 
 

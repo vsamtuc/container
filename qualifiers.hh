@@ -326,11 +326,27 @@ class qualifier
 public:
 
 	/// Constructor. This should not be used in user code.
-	inline qualifier(qual_base* p=nullptr) : sptr(p) {
+	inline qualifier(qual_base* p=nullptr)
+	: sptr(p)
+	{
 		if(p==nullptr)
 			(*this) = Null;
 	}
 
+	template <typename QualBase>
+	inline qualifier(const std::shared_ptr<QualBase>& p)
+	: sptr(p)
+	{
+		if(sptr==nullptr)
+			(*this) = Null;
+	}
+
+	inline qualifier(std::shared_ptr<qual_base>&& p)
+	: sptr(p)
+	{
+		if(sptr==nullptr)
+			(*this) = Null;
+	}
 
 	/// Compare two qualifiers for equality
 	inline bool operator==(const qualifier& other) const {
@@ -444,12 +460,11 @@ inline cdi::qualifier qname(arg_type val) { return cdi::qualifier(new QUAL_CLASS
 #define DEFINE_QUALIFIER(qname, qvalue_type, arg_type) DEFINE_QUALIFIER_CUSTOM(qname,qvalue_type,arg_type,)
 
 
-DEFINE_VOID_QUALIFIER(Default)
+DEFINE_VOID_QUALIFIER(Default);
 DEFINE_VOID_QUALIFIER_CUSTOM(All,
 	inline bool matches(const qual_base& other) const override { return true; }
-	)
-DEFINE_VOID_QUALIFIER(Null)
-
+	);
+DEFINE_VOID_QUALIFIER(Null);
 
 
 
@@ -462,12 +477,10 @@ DEFINE_VOID_QUALIFIER(Null)
 	Void-value qualifiers are similar if and only if they are equal.
 	However, two qualifiers with a value can be similar but not equal
 	(e.g. `Name("foo")` and `Name("bar")` are similar but not equal )
-
   */
 class qualifiers
 {
 public:
-	//qualifiers({Default});
 
 	/// Create a singleton set containing `Q`.
 	qualifiers(const qualifier& Q)
@@ -497,6 +510,27 @@ public:
  	  */
 	inline bool contains_similar(const qualifier& q) const {
 		return qset.count(q)!=0;
+	}
+
+	/**
+		Return a subset of qualifiers with underlying implementation
+		being an instance of a class.
+
+		@tparam QualClass base class for the implementations of collected
+			qualifiers.
+		@tparam OutputIter iterator type
+		@param iter an output iterator used to collect the result
+
+		When a set of qualifier types are subclasses of a base class,
+		this call can select it.
+		Passing `qual_base` as the base class, will select every element.
+		*/
+	template <typename QualClass, typename OutputIter>
+	void collect(OutputIter iter) const {
+		std::copy_if(qset.begin(), qset.end(), iter,
+			[](const qualifier& q) -> bool {
+				return bool(q.get<QualClass>());
+			});
 	}
 
 	/**
