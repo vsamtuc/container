@@ -30,6 +30,7 @@
 *.exe
 *.out
 *.app
+unit_tests
 
 # generated tests files
 *_tests.cc
@@ -40,3 +41,15 @@
 Makefile
 Makefile.in
 config.*
+.deps
+autom4te.cache
+*.gch
+doxygen-doc
+install-sh
+missing
+test-driver
+stamp-h1
+depcomp
+configure
+test-suite.log
+aclocal.m4
