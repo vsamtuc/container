@@ -122,6 +122,15 @@ namespace detail {
 		typename T::instance_type,
 		typename T::return_type
 	> > : std::true_type { };
+
+
+	template <typename T, class=std::void_t<> >
+	struct rcast { typedef T type; };
+
+	template <typename T>
+	struct rcast<T, std::void_t< typename T::return_type> > {
+		typedef typename T::return_type type;
+	};
 }
 
 /**
@@ -145,6 +154,12 @@ inline constexpr bool is_resource_type = std::conjunction_v<
   std::is_convertible<Resource, resourceid>
   >;
 
+template <typename T>
+// note: we should not just use rcast<T>::type, since T may
+// have a 'return_type' member but not be a resource type...
+using resource_cast = std::conditional_t< is_resource_type<T>,
+	typename detail::rcast<T>::type,
+	T>;
 
 namespace detail {
 	//

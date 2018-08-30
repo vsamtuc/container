@@ -3,6 +3,10 @@
 ## Immediate
   - add resource<...> API for put()
 
+  - make system check for existing provider... disallow re-setting a provider,
+    add provider_override
+    Same for initializer, disposer, etc?
+
 ## Next steps
 
 -	Resource managers could be initialized from other RMs.

@@ -1,5 +1,7 @@
 #pragma once
 
+#include <iostream>
+
 #include <cxxtest/TestSuite.h>
 #include <vector>
 
