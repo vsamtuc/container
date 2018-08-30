@@ -131,19 +131,16 @@ public:
 		Bar(string a) : x(0) { }
 		Bar(int a) : x(a) { }
 
-		void initialize() {
-			cout << "Initializing bar, x=" << x << endl;
-		}
-		void dispose() {
-			cout << "Disposing bar, x=" << x << endl;
-		}
+		void initialize() { ++init; }
+		void dispose() { ++disp; }
 
 		void set_x(int p, int q) { x=p*q;}
 
 		void add_x(int q) {
 			x+=q;
 		}
-
+		inline static size_t init = 0;
+		inline static size_t disp = 0;
 	};
 
 	DEFINE_QUALIFIER(Name, string, const string&);
@@ -166,7 +163,7 @@ public:
 		t.provide("Hello");
 
 		ctype u({Null,Default});
-		u.provide().inject(&Bar::set_a, 10).set(&Bar::a, 20);
+		u.provide().inject(&Bar::set_a, 10).inject(&Bar::a, 20);
 
 		ctype v(Name("v"));
 		v.provide().inject(&Bar::x, constnum).inject(&Bar::add_x, 17);
@@ -178,10 +175,16 @@ public:
 		TS_ASSERT_EQUALS( (get(s)->x) ,100);
 		TS_ASSERT_EQUALS( (get(t)->x) ,0);
 		TS_ASSERT_EQUALS( (get(u)->x), -1);
+		TS_ASSERT_EQUALS( (get(u)->a), 20);
 		TS_ASSERT_EQUALS( (get(v)->x), 117);
 		TS_ASSERT_EQUALS( (get(w)->x), 300);
 	}
 
+	void test_after_get_bar()
+	{
+		TS_ASSERT_EQUALS(Bar::init, 6);
+		TS_ASSERT_EQUALS(Bar::disp, 6);
+	}
 
 	template <typename Instance>
 	struct minimal_resource
